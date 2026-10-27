@@ -1,0 +1,971 @@
+<title>Grappling Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<style>
+  /* Layout: one centered column; the cage canvas with its HUD is the hero, contextual moves sit under it, then setup, stats and the fight log. */
+  :root {
+    --bg: #eef0f3; --surface: #ffffff; --ink: #16181d; --muted: #5b6170; --line: #d5d9e1;
+    --blue: #1f5fbf; --red: #c8232c; --gold: #b8860b; --on-accent: #ffffff;
+    --wall: #dfe3ea; --wall-2: #c9cfd9; --fence: rgba(40, 48, 64, 0.20); --post: #2c313b;
+    --mat: #cfd5de; --mat-line: #aeb6c3; --shadow: rgba(10, 14, 22, 0.22);
+    --hud-bg: rgba(255, 255, 255, 0.86); --track: #dfe3ea; --zone: #2f9e5b;
+    --display: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
+    --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #101318; --surface: #181c23; --ink: #e9ecf2; --muted: #9aa3b2; --line: #2a303b;
+      --blue: #5b93ea; --red: #e5484f; --gold: #e0b341; --on-accent: #0c0f14;
+      --wall: #1a1f27; --wall-2: #232a35; --fence: rgba(200, 210, 230, 0.13); --post: #0b0d11;
+      --mat: #262c36; --mat-line: #384150; --shadow: rgba(0, 0, 0, 0.45);
+      --hud-bg: rgba(16, 19, 24, 0.82); --track: #2a303b; --zone: #3fbf74;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #101318; --surface: #181c23; --ink: #e9ecf2; --muted: #9aa3b2; --line: #2a303b;
+    --blue: #5b93ea; --red: #e5484f; --gold: #e0b341; --on-accent: #0c0f14;
+    --wall: #1a1f27; --wall-2: #232a35; --fence: rgba(200, 210, 230, 0.13); --post: #0b0d11;
+    --mat: #262c36; --mat-line: #384150; --shadow: rgba(0, 0, 0, 0.45);
+    --hud-bg: rgba(16, 19, 24, 0.82); --track: #2a303b; --zone: #3fbf74;
+    color-scheme: dark;
+  }
+  [hidden] { display: none !important; }
+  body { background: var(--bg); color: var(--ink); font: 400 15px/1.55 var(--body); }
+  .wrap {
+    max-width: 1040px; margin: 0 auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 32px 64px;
+    display: grid; gap: 32px;
+  }
+  header { display: grid; gap: 10px; }
+  .eyebrow { font: 500 12px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  h1, h2 { font-family: var(--display); font-weight: 800; text-transform: uppercase; letter-spacing: 0.01em; line-height: 0.95; margin: 0; text-wrap: balance; }
+  h1 { font-size: clamp(40px, 7vw, 68px); }
+  h1 .corner { color: var(--red); }
+  h2 { font-size: 28px; }
+  p { margin: 0; max-width: 65ch; }
+  .lede { font-size: 17px; color: var(--muted); }
+
+  .stage { display: grid; gap: 14px; }
+  .canvas-box { position: relative; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--wall); }
+  canvas { display: block; width: 100%; aspect-ratio: 760 / 420; max-width: 100%; }
+  .status { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; background: var(--surface); color: var(--muted); }
+
+  .hud { position: absolute; top: 10px; left: 10px; right: 10px; display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; pointer-events: none; }
+  .bar { display: grid; gap: 3px; min-width: 0; }
+  .bar.blue { text-align: right; }
+  .bar .who { font: 700 15px/1 var(--display); letter-spacing: 0.04em; text-transform: uppercase; }
+  .bar.red .who { color: var(--red); }
+  .bar.blue .who { color: var(--blue); }
+  .bar .who small { font: 500 11px/1 var(--mono); color: var(--muted); letter-spacing: 0.06em; margin: 0 6px; }
+  .hp { height: 9px; border-radius: 2px; background: var(--hud-bg); border: 1px solid var(--line); overflow: hidden; }
+  .hp i { display: block; height: 100%; transition: width 0.25s ease-out; }
+  .bar.red .hp i { background: var(--red); }
+  .bar.blue .hp i { background: var(--blue); margin-left: auto; }
+  .pos { font: 500 12px/1 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; padding: 6px 9px; border-radius: 3px; background: var(--hud-bg); border: 1px solid var(--line); white-space: nowrap; }
+
+  .banner { position: absolute; left: 0; right: 0; top: 30%; text-align: center; pointer-events: none;
+    font: 800 clamp(30px, 7vw, 64px)/1 var(--display); text-transform: uppercase; letter-spacing: 0.02em;
+    color: var(--ink); text-shadow: 0 2px 0 var(--bg), 0 0 18px var(--bg); opacity: 0; transition: opacity 0.2s; }
+  .banner.show { opacity: 1; }
+  .banner small { display: block; margin-top: 8px; font: 600 14px/1.3 var(--body); text-transform: none; letter-spacing: 0; color: var(--muted); }
+
+  .panel { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); width: min(420px, calc(100% - 24px));
+    display: grid; gap: 6px; padding: 10px 12px; border-radius: 5px; background: var(--hud-bg); border: 1px solid var(--line); }
+  .panel .title { display: flex; justify-content: space-between; gap: 10px; font: 700 18px/1 var(--display); text-transform: uppercase; letter-spacing: 0.03em; }
+  .panel .title span:last-child { font: 500 11px/1.6 var(--mono); color: var(--muted); text-transform: none; letter-spacing: 0; }
+  .track { position: relative; height: 16px; border-radius: 3px; background: var(--track); overflow: hidden; }
+  .track .zone { position: absolute; top: 0; bottom: 0; background: var(--zone); opacity: 0.85; }
+  .track .needle { position: absolute; top: -2px; bottom: -2px; width: 4px; margin-left: -2px; background: var(--ink); border-radius: 2px; }
+  .tug { position: relative; height: 16px; border-radius: 3px; overflow: hidden; background: var(--blue); }
+  .tug i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--red); }
+  .tug b { position: absolute; top: -2px; bottom: -2px; width: 3px; margin-left: -1.5px; background: var(--ink); }
+
+  .controls { display: grid; gap: 12px; }
+  .prompt { font-weight: 600; min-height: 1.55em; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; }
+  button, select {
+    font: 600 14px/1 var(--body); color: var(--ink); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; cursor: pointer;
+  }
+  button:hover:not(:disabled), select:hover { border-color: var(--muted); }
+  button:disabled { opacity: 0.4; cursor: default; }
+  button:focus-visible, select:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  button.act { display: inline-flex; gap: 8px; align-items: center; }
+  button.act.hot { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+  kbd { font: 500 11px/1 var(--mono); padding: 3px 5px; border-radius: 3px; border: 1px solid currentColor; opacity: 0.7; }
+
+  .setup { display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: flex-end; }
+  .field { display: grid; gap: 6px; }
+  .label { font: 500 11px/1 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 28px; }
+  .two > section { display: grid; gap: 12px; align-content: start; min-width: 0; }
+  table.stats { width: 100%; border-collapse: collapse; font-size: 14px; }
+  table.stats th { font: 500 11px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); text-align: left; padding: 0 0 8px; }
+  table.stats td { padding: 5px 0; border-top: 1px solid var(--line); vertical-align: middle; }
+  table.stats td.num { width: 34px; text-align: right; font: 500 13px/1 var(--mono); font-variant-numeric: tabular-nums; padding-left: 8px; }
+  .mini { height: 6px; background: var(--track); border-radius: 2px; overflow: hidden; }
+  .mini i { display: block; height: 100%; }
+  .mini.red i { background: var(--red); }
+  .mini.blue i { background: var(--blue); }
+  ol.log { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; font-size: 14px; }
+  ol.log li { padding: 8px 0; border-top: 1px solid var(--line); display: grid; gap: 2px; }
+  ol.log li small { font: 400 12px/1.4 var(--mono); color: var(--muted); }
+  ol.log li:first-child { font-weight: 600; }
+  .flow { margin: 0; padding-left: 20px; display: grid; gap: 6px; color: var(--muted); }
+  .flow b { color: var(--ink); }
+  code { font: 400 13px/1.4 var(--mono); }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">2D MMA &middot; Grappling prototype</div>
+    <h1>Grappling <span class="corner">lab</span></h1>
+    <p class="lede">Two fighters built from the same body-part sprites, now wrestling. Shoot a double-leg in three phases, land in a position the stats decide, then ground and pound, sweep, or go for the tap.</p>
+  </header>
+
+  <div class="stage">
+    <div class="canvas-box">
+      <canvas id="stage" width="760" height="420" role="img" aria-label="Two MMA fighters grappling in a cage while a referee watches"></canvas>
+      <div class="hud" id="hud" hidden>
+        <div class="bar red"><span class="who">Red<small id="red-style"></small></span><div class="hp"><i id="red-hp" style="width:100%"></i></div></div>
+        <div class="pos" id="pos">Standing</div>
+        <div class="bar blue"><span class="who"><small id="blue-style"></small>Blue</span><div class="hp"><i id="blue-hp" style="width:100%"></i></div></div>
+      </div>
+      <div class="banner" id="banner"></div>
+      <div class="panel" id="timing" hidden>
+        <div class="title"><span id="timing-title">Drive!</span><span>Press Space in the green</span></div>
+        <div class="track"><div class="zone" id="timing-zone"></div><div class="needle" id="timing-needle"></div></div>
+      </div>
+      <div class="panel" id="sub" hidden>
+        <div class="title"><span id="sub-title">Armbar</span><span id="sub-hint">Mash Space</span></div>
+        <div class="tug"><i id="sub-fill"></i><b id="sub-mark"></b></div>
+      </div>
+      <div class="status" id="status">Loading fighters&hellip;</div>
+    </div>
+
+    <div class="controls">
+      <div class="prompt" id="prompt"></div>
+      <div class="row" id="actions">
+        <button class="act" type="button" data-act="s"><span>Shoot</span> <kbd>S</kbd></button>
+        <button class="act" type="button" data-act="j">Punch <kbd>J</kbd></button>
+        <button class="act" type="button" data-act="l">Block <kbd>L</kbd></button>
+        <button class="act" type="button" data-act="w">Advance <kbd>W</kbd></button>
+        <button class="act" type="button" data-act="k"><span>Submit</span> <kbd>K</kbd></button>
+        <button class="act" type="button" data-act=" ">Time it / mash <kbd>Space</kbd></button>
+      </div>
+      <div class="setup">
+        <div class="field"><label class="label" for="human">You control</label>
+          <select id="human"><option value="red">Red corner</option><option value="blue">Blue corner</option></select></div>
+        <div class="field"><label class="label" for="style-red">Red style</label><select id="style-red"></select></div>
+        <div class="field"><label class="label" for="style-blue">Blue style</label><select id="style-blue"></select></div>
+        <button type="button" id="restart">Restart fight</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="two">
+    <section>
+      <h2>Stats</h2>
+      <p>Every contest rolls each fighter's stat plus how well the timing bar was hit. Change the styles to see different outcomes.</p>
+      <table class="stats" id="stats"></table>
+    </section>
+    <section>
+      <h2>Fight log</h2>
+      <ol class="log" id="log"></ol>
+    </section>
+  </div>
+
+  <section>
+    <h2>How the takedown works</h2>
+    <ol class="flow">
+      <li><b>Level change.</b> The shooter drops their hips. If the defender reads it (takedown defense beats takedowns by a clear margin), the shot is stuffed before it starts.</li>
+      <li><b>The grab.</b> The shooter wraps the legs. A big defender win is a sprawl and both reset on the feet. A small defender win still goes to the mat, but the defender lands in guard.</li>
+      <li><b>The finish.</b> A shooter win drives through. The bigger the win, the better the landing: side control, then mount.</li>
+      <li><b>On the mat.</b> Top punches and passes. Bottom blocks, sweeps (mount and guard sweeps flip who is on top) and submits from guard. Mount top can attack an arm-triangle.</li>
+    </ol>
+  </section>
+</div>
+
+<script>
+(() => {
+  const D = Math.PI / 180;
+  const W = 760, H = 420, FLOOR = 360, CENTER = 380;
+  const canvas = document.getElementById('stage');
+  const ctx = canvas.getContext('2d');
+  const $ = id => document.getElementById(id);
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const ease = u => u * u * (3 - 2 * u);
+
+  let rig, data;
+  const images = {};
+  let colors = {}, scale = 1;
+
+  // ---------- Actors ----------
+  const SKIN_DARK = { '#c68a5e': '#8d5b3d', '#a86f47': '#6e4329', '#b67a50': '#7a4e33', '#1f1510': '#0d0907' };
+  const actors = {
+    red: {
+      color: 'red', facing: 1, style: 'wrestling', health: 100,
+      parts: { '@hand': 'glove_mma', '@pelvis': 'pelvis_mma', '@thigh': 'thigh_mma' },
+      recolor: { '#2bb3a3': '#d6333b' }
+    },
+    blue: {
+      color: 'blue', facing: -1, style: 'bjj', health: 100,
+      parts: { '@hand': 'glove_mma', '@pelvis': 'pelvis_mma', '@thigh': 'thigh_mma' },
+      recolor: Object.assign({ '#2bb3a3': '#2f6fd6' }, SKIN_DARK)
+    },
+    ref: {
+      color: 'ref', facing: -1, scale: 0.86, depth: 14,
+      parts: { '@hand': 'hand_open', '@pelvis': 'pelvis_ref', '@thigh': 'thigh_ref', torso: 'torso_ref', upper_arm: 'upper_arm_ref', shin: 'shin_ref', foot: 'foot_ref' },
+      recolor: { '#c68a5e': '#e2b08c', '#a86f47': '#c58f6b', '#b67a50': '#d09d79', '#1f1510': '#8a8f99' }
+    }
+  };
+
+  // ---------- Loading ----------
+  async function getJSON(url) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(url + ' returned ' + res.status);
+    return res.json();
+  }
+  async function getText(url) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(url + ' returned ' + res.status);
+    return res.text();
+  }
+  function loadImage(src) {
+    return new Promise((resolve, reject) => {
+      const im = new Image();
+      im.onload = () => resolve(im);
+      im.onerror = () => reject(new Error('Could not draw ' + src));
+      im.src = src;
+    });
+  }
+  // Palette swap: the same SVG becomes a different skin tone or trim color.
+  function recolor(svg, map) {
+    for (const [from, to] of Object.entries(map)) svg = svg.split(from).join(to);
+    return svg;
+  }
+  function tinted(im, part) {
+    const s = 3, c = document.createElement('canvas');
+    c.width = part.size[0] * s; c.height = part.size[1] * s;
+    const g = c.getContext('2d');
+    g.drawImage(im, 0, 0, c.width, c.height);
+    g.globalCompositeOperation = 'source-atop';
+    g.fillStyle = rig.farTint;
+    g.fillRect(0, 0, c.width, c.height);
+    return c;
+  }
+  async function loadParts() {
+    const sources = {};
+    await Promise.all(Object.entries(rig.parts).map(async ([key, part]) => { sources[key] = await getText(part.file); }));
+    const jobs = [];
+    for (const actor of Object.values(actors)) {
+      images[actor.color] = {};
+      for (const [key, part] of Object.entries(rig.parts)) {
+        jobs.push((async () => {
+          const svg = recolor(sources[key], actor.recolor);
+          const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+          const im = await loadImage(url);
+          images[actor.color][key] = { near: im, far: tinted(im, part) };
+        })());
+      }
+    }
+    await Promise.all(jobs);
+  }
+
+  // ---------- Rig math ----------
+  const ARM = /_(upper|fore|hand)$/, LEG = /_(thigh|shin|foot)$/;
+  function groupOf(entry) {
+    if (entry.bone.startsWith('lead_')) return ARM.test(entry.bone) ? 'far_arm' : 'far_leg';
+    if (entry.bone.startsWith('rear_')) return ARM.test(entry.bone) ? 'near_arm' : 'near_leg';
+    return 'body';
+  }
+
+  function merge(base, over) {
+    if (!over) return base;
+    const out = Object.assign({}, base, over);
+    out.root = Object.assign({}, base.root, over.root);
+    return out;
+  }
+  // Fill every bone so poses blend number by number. Feet left out stay level.
+  function resolve(pose, x) {
+    const out = { x: (x || 0) + (pose.root?.x || 0), rot: pose.root?.rot || 0, lift: pose.root?.lift || 0 };
+    const world = {};
+    for (const b of rig.bones) {
+      if (!b.parent) { world[b.id] = out.rot; continue; }
+      let v = pose[b.id];
+      if (v === undefined) v = b.level ? -world[b.parent] : 0;
+      out[b.id] = v;
+      world[b.id] = world[b.parent] + v;
+    }
+    return out;
+  }
+  function blend(a, b, u) {
+    const out = {};
+    for (const k in a) out[k] = a[k] + (b[k] - a[k]) * u;
+    return out;
+  }
+  function solve(p) {
+    const w = {};
+    for (const b of rig.bones) {
+      if (!b.parent) { w[b.id] = { x: 0, y: 0, a: p.rot }; continue; }
+      const P = w[b.parent], r = P.a * D, [ax, ay] = b.at;
+      w[b.id] = { x: P.x + ax * Math.cos(r) - ay * Math.sin(r), y: P.y + ax * Math.sin(r) + ay * Math.cos(r), a: P.a + p[b.id] };
+    }
+    return w;
+  }
+  function partFor(actor, key) { return actor.parts[key] || key; }
+  function local(t, part, px, py) {
+    const r = t.a * D, x = px - part.pivot[0], y = py - part.pivot[1];
+    return { x: t.x + x * Math.cos(r) - y * Math.sin(r), y: t.y + x * Math.sin(r) + y * Math.cos(r) };
+  }
+  // Rest the lowest point of the body on the mat, then apply lift.
+  function placement(actor, pose) {
+    const w = solve(pose);
+    let lowest = -Infinity;
+    for (const e of rig.draw) {
+      const part = rig.parts[partFor(actor, e.part)];
+      for (const [hx, hy] of part.hull) lowest = Math.max(lowest, local(w[e.bone], part, hx, hy).y);
+    }
+    return { w, oy: FLOOR - (actor.depth || 0) - lowest * (actor.scale || 1) - pose.lift };
+  }
+
+  // ---------- Pose tweening ----------
+  function now() { return performance.now(); }
+  function current(actor, t) {
+    const u = actor.dur ? clamp((t - actor.t0) / actor.dur, 0, 1) : 1;
+    return blend(actor.from, actor.to, ease(u));
+  }
+  function setPose(actor, target, dur) {
+    actor.from = actor.to ? current(actor, now()) : target;
+    actor.to = target;
+    actor.t0 = now();
+    actor.dur = dur;
+  }
+
+  // ---------- Game state ----------
+  const S = {
+    human: 'red', topIsRed: true, pair: 'neutral', position: null, layers: null,
+    busy: false, over: false, nextCpu: 0, subReady: 0, blockAt: -1e9, timing: null, sub: null,
+    shake: 0, sparks: [], refX: 640, refFrom: 640, refT0: 0
+  };
+  let gen = 0;
+  class Abort extends Error {}
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  async function step(promise) {
+    const g = gen, r = await promise;
+    if (g !== gen) throw new Abort();
+    return r;
+  }
+
+  const colorOf = role => (role === 'top') === S.topIsRed ? 'red' : 'blue';
+  const roleOf = color => (color === 'red') === S.topIsRed ? 'top' : 'bottom';
+  const other = color => color === 'red' ? 'blue' : 'red';
+  const stats = color => data.styles[actors[color].style];
+  const label = color => color === 'red' ? 'Red' : 'Blue';
+  const flip = () => S.topIsRed ? 1 : -1;
+
+  function overlay(role, name) {
+    const set = S.position && data.overlays[S.position];
+    if (!set || !name) return null;
+    const o = set[name];
+    return o && (o.top || o.bottom) ? o[role] : o;
+  }
+  function targetFor(role, pairName, over) {
+    const spec = data.pairs[pairName][role];
+    return resolve(merge(data.poses[spec.pose], over), spec.x);
+  }
+  // Move both fighters into a pair (optionally with overlays) over `ms`.
+  function show(pairName, ms, overs = {}) {
+    S.pair = pairName;
+    S.layers = data.pairs[pairName].layers || ['bottom.all', 'top.all'];
+    for (const role of ['top', 'bottom']) setPose(actors[colorOf(role)], targetFor(role, pairName, overs[role]), ms);
+    return sleep(ms);
+  }
+  function poseRole(role, overName, ms) {
+    setPose(actors[colorOf(role)], targetFor(role, S.pair, overlay(role, overName)), ms);
+    return sleep(ms);
+  }
+  // Who is on top changes: re-express both fighters in the mirrored frame so nothing jumps.
+  function swapRoles() {
+    S.topIsRed = !S.topIsRed;
+    for (const c of ['red', 'blue']) {
+      const a = actors[c];
+      a.from = Object.assign({}, a.from, { x: -a.from.x });
+      a.to = Object.assign({}, a.to, { x: -a.to.x });
+    }
+  }
+  function moveRef(pose, x, ms) {
+    S.refFrom = refWorldX(); S.refX = x; S.refT0 = now(); S.refDur = ms;
+    setPose(actors.ref, resolve(data.poses[pose]), ms);
+  }
+  function refWorldX() {
+    const u = S.refDur ? clamp((now() - S.refT0) / S.refDur, 0, 1) : 1;
+    return S.refFrom + (S.refX - S.refFrom) * ease(u);
+  }
+
+  // ---------- Messages ----------
+  let bannerTimer;
+  function banner(text, sub, ms = 1300) {
+    const el = $('banner');
+    el.innerHTML = text + (sub ? '<small>' + sub + '</small>' : '');
+    el.classList.add('show');
+    clearTimeout(bannerTimer);
+    if (ms) bannerTimer = setTimeout(() => el.classList.remove('show'), ms);
+  }
+  function log(text, detail) {
+    const li = document.createElement('li');
+    li.innerHTML = text + (detail ? '<small>' + detail + '</small>' : '');
+    const list = $('log');
+    list.prepend(li);
+    while (list.children.length > 8) list.lastChild.remove();
+  }
+  const POS_NAME = { guard: 'Closed guard', side: 'Side control', mount: 'Mount' };
+
+  // ---------- Contests ----------
+  // A contest rolls stat + timing for both sides. The human side times a bar; the CPU side rolls one.
+  function cpuTiming(stat) { return clamp(0.15 + stat / 100 * 0.55 + rand(-0.25, 0.25), 0, 1); }
+  function timingBar(title, stat) {
+    return new Promise(resolve => {
+      const width = 0.1 + stat / 100 * 0.14;
+      const center = rand(0.3 + width / 2, 0.8 - width / 2);
+      S.timing = { title, width, center, start: now(), period: 1000, resolve };
+      $('timing-title').textContent = title;
+      const zone = $('timing-zone');
+      zone.style.left = ((center - width / 2) * 100) + '%';
+      zone.style.width = (width * 100) + '%';
+      $('timing').hidden = false;
+      updateUI();
+    });
+  }
+  function needlePos(t) {
+    const u = ((now() - t.start) / t.period) % 2;
+    return u < 1 ? u : 2 - u;
+  }
+  function pressTiming() {
+    const t = S.timing;
+    if (!t) return false;
+    const d = Math.abs(needlePos(t) - t.center);
+    endTiming(clamp(1 - d / (t.width * 1.5), 0, 1));
+    return true;
+  }
+  function endTiming(q) {
+    const t = S.timing;
+    if (!t) return;
+    S.timing = null;
+    $('timing').hidden = true;
+    banner(q > 0.9 ? 'Perfect' : q > 0.6 ? 'Good' : q > 0 ? 'Off' : 'Missed', null, 600);
+    t.resolve(q);
+    updateUI();
+  }
+  async function contest({ att, def, attStat, defStat, attTitle, defTitle, defBonus = 0 }) {
+    const q = {};
+    q[att] = att === S.human ? null : cpuTiming(attStat);
+    q[def] = def === S.human ? null : cpuTiming(defStat);
+    if (q[att] === null) q[att] = await step(timingBar(attTitle, attStat));
+    if (q[def] === null) q[def] = await step(timingBar(defTitle, defStat));
+    const a = attStat * 0.6 + q[att] * 30 + rand(0, 14);
+    const d = defStat * 0.6 + q[def] * 30 + rand(0, 14) + defBonus;
+    return { margin: a - d, detail: label(att) + ' ' + attStat + ' + timing ' + Math.round(q[att] * 100) + '% vs ' + label(def) + ' ' + defStat + ' + timing ' + Math.round(q[def] * 100) + '%  \u2192  margin ' + (a - d >= 0 ? '+' : '') + Math.round(a - d) };
+  }
+
+  // ---------- Actions ----------
+  function act(fn) {
+    if (S.busy || S.over) return;
+    S.busy = true;
+    updateUI();
+    const g = gen;
+    fn().catch(err => { if (!(err instanceof Abort)) console.error(err); })
+      .finally(() => { if (g === gen) { S.busy = false; S.nextCpu = Math.max(S.nextCpu, now() + 500); updateUI(); } });
+  }
+
+  function shoot(att) {
+    act(async () => {
+      const def = other(att);
+      if ((att === 'red') !== S.topIsRed) swapRoles();
+      log(label(att) + ' changes levels');
+      await step(show('level', 260));
+      const r1 = await contest({ att, def, attStat: stats(att).takedowns, defStat: stats(def).td_defense, attTitle: 'Level change: explode!', defTitle: 'Read the level change!' });
+      if (r1.margin < -10) {
+        log(label(def) + ' reads it and stuffs the shot', r1.detail);
+        banner('Stuffed', label(def) + ' read the level change');
+        await step(show('level_stuff', 260));
+        await step(sleep(500));
+        await step(show('neutral', 520));
+        return;
+      }
+      await step(show('grab', 220));
+      const r2 = await contest({ att, def, attStat: stats(att).takedowns, defStat: stats(def).td_defense, attTitle: 'Grab: drive through!', defTitle: 'Sprawl!' });
+      if (r2.margin < -15) {
+        log(label(def) + ' sprawls and the takedown is stuffed', r2.detail);
+        banner('Sprawl', 'Takedown stuffed');
+        await step(show('sprawl', 360));
+        await step(sleep(700));
+        await step(show('neutral', 620));
+        return;
+      }
+      const land = r2.margin < -3 ? 'guard' : r2.margin < 15 ? 'side' : 'mount';
+      await step(show('drive', 230));
+      S.position = land;
+      await step(show(land, 280));
+      S.shake = 9;
+      hurt(def, 5);
+      moveRef('ref_watch', 640, 500);
+      if (land === 'guard') {
+        log(label(def) + ' scrambles on the way down and lands in guard', r2.detail);
+        banner('Takedown', label(def) + ' lands in closed guard');
+      } else {
+        log(label(att) + ' takes it down to ' + POS_NAME[land].toLowerCase(), r2.detail);
+        banner('Takedown', label(att) + ' lands in ' + POS_NAME[land].toLowerCase());
+      }
+    });
+  }
+
+  const POS_MULT = { guard: 0.6, side: 1, mount: 1.25 };
+  function punch() {
+    act(async () => {
+      const att = colorOf('top'), def = colorOf('bottom');
+      const cpuDef = def !== S.human;
+      const blockChance = clamp(0.2 + stats(def).guard / 200 - stats(att).top / 400, 0.05, 0.7);
+      const cpuBlocks = cpuDef && Math.random() < blockChance;
+      if (!cpuDef) banner('Block!', 'Press L', 500);
+      poseRole('top', 'top_cock', att === S.human ? 170 : 300);
+      if (cpuBlocks) poseRole('bottom', 'bottom_block', 180);
+      await step(sleep(att === S.human ? 170 : 330));
+      const blocked = cpuDef ? cpuBlocks : now() - S.blockAt < 520;
+      await step(poseRole('top', 'top_punch', 100));
+      const fist = fistPoint(att);
+      if (blocked) {
+        S.sparks.push({ x: fist.x, y: fist.y, t: now(), big: false });
+        hurt(def, 1);
+        log(label(def) + ' blocks the punch');
+      } else {
+        const dmg = (4 + stats(att).power / 12) * POS_MULT[S.position] * rand(0.85, 1.15);
+        S.sparks.push({ x: fist.x, y: fist.y, t: now(), big: true });
+        S.shake = 5;
+        poseRole('bottom', 'bottom_hit', 90);
+        hurt(def, dmg);
+        log(label(att) + ' lands ground and pound', Math.round(dmg) + ' damage from ' + POS_NAME[S.position].toLowerCase());
+      }
+      await step(sleep(120));
+      if (actors[def].health <= 0) return finish(att, 'TKO', 'Ground and pound');
+      poseRole('top', null, 260);
+      await step(poseRole('bottom', null, 300));
+    });
+  }
+
+  function block() {
+    if (S.over || !S.position || colorOf('bottom') !== S.human) return;
+    S.blockAt = now();
+    poseRole('bottom', 'bottom_block', 120);
+    const at = S.blockAt;
+    setTimeout(() => { if (S.blockAt === at && !S.busy && !S.over) poseRole('bottom', null, 260); }, 600);
+  }
+
+  const NEXT = { guard: 'side', side: 'mount' };
+  function advance() {
+    if (!NEXT[S.position]) return;
+    act(async () => {
+      const att = colorOf('top'), def = colorOf('bottom'), from = S.position, to = NEXT[from];
+      const r = await contest({ att, def, attStat: stats(att).top, defStat: stats(def).guard, attTitle: 'Pass!', defTitle: 'Keep the position!', defBonus: from === 'guard' ? 6 : 0 });
+      if (r.margin > 0) {
+        S.position = to;
+        await step(show(to, 520));
+        log(label(att) + ' advances to ' + POS_NAME[to].toLowerCase(), r.detail);
+        banner(to === 'mount' ? 'Mount' : 'Guard passed');
+      } else {
+        await step(poseRole('bottom', 'bottom_try', 200));
+        await step(poseRole('bottom', null, 300));
+        log(label(def) + ' keeps ' + POS_NAME[from].toLowerCase(), r.detail);
+      }
+    });
+  }
+
+  const SWEEP = {
+    mount: { name: 'Upa sweep', to: 'guard', swap: true, bonus: 8 },
+    guard: { name: 'Scissor sweep', to: 'mount', swap: true, bonus: 0 },
+    side:  { name: 'Guard recovery', to: 'guard', swap: false, bonus: 4 }
+  };
+  function sweep() {
+    act(async () => {
+      const att = colorOf('bottom'), def = colorOf('top'), sw = SWEEP[S.position];
+      await step(poseRole('bottom', 'bottom_try', 220));
+      const r = await contest({ att, def, attStat: stats(att).guard, defStat: stats(def).top, attTitle: sw.name + '!', defTitle: 'Base out!', defBonus: sw.bonus });
+      if (r.margin > 0) {
+        if (sw.swap) swapRoles();
+        S.position = sw.to;
+        await step(show(sw.to, 560));
+        S.shake = sw.swap ? 7 : 0;
+        log(label(att) + (sw.swap ? ' sweeps! Now on top in ' : ' recovers ') + POS_NAME[sw.to].toLowerCase(), r.detail);
+        banner(sw.swap ? 'Sweep' : 'Guard recovered', sw.name);
+      } else {
+        await step(poseRole('bottom', null, 320));
+        log(label(def) + ' bases out of the ' + sw.name.toLowerCase(), r.detail);
+      }
+    });
+  }
+
+  function canSubmit(color) {
+    const set = data.overlays[S.position];
+    return !!(set && set.sub_by && roleOf(color) === set.sub_by);
+  }
+  function submit() {
+    act(async () => {
+      const set = data.overlays[S.position];
+      const att = colorOf(set.sub_by), def = other(att);
+      const attStat = set.sub_by === 'top' ? stats(att).top : stats(att).guard;
+      const defStat = Math.round((stats(def).guard * 0.6 + stats(def).top * 0.4) * (0.6 + 0.4 * actors[def].health / 100));
+      log(label(att) + ' goes for the ' + set.sub_name.toLowerCase());
+      const result = await step(subGame(att, def, attStat, defStat, set));
+      S.subReady = now() + 6000;
+      if (result === 'tap') return finish(att, 'Tap out', set.sub_name);
+      log(label(def) + ' escapes the ' + set.sub_name.toLowerCase(), 'Attack ' + attStat + ' vs defense ' + defStat);
+      banner('Escaped', set.sub_name);
+      await step(show(S.position, 420));
+    });
+  }
+  // Tug of war: the attacker pushes the meter toward the tap, the defender pulls it back.
+  function subGame(att, def, attStat, defStat, set) {
+    return new Promise(resolve => {
+      S.sub = { att, def, attStat, defStat, set, v: 40, start: now(), last: now(), acc: { att: 0, def: 0 }, resolve,
+        loose: { top: targetFor('top', S.position, set.sub_loose.top), bottom: targetFor('bottom', S.position, set.sub_loose.bottom) },
+        tight: { top: targetFor('top', S.position, set.sub_tight.top), bottom: targetFor('bottom', S.position, set.sub_tight.bottom) } };
+      $('sub-title').textContent = set.sub_name;
+      $('sub-hint').textContent = S.human === att ? 'Mash Space to finish it' : S.human === def ? 'Mash Space to escape' : '';
+      $('sub').hidden = false;
+      for (const role of ['top', 'bottom']) setPose(actors[colorOf(role)], S.sub.loose[role], 260);
+      updateUI();
+    });
+  }
+  function subTap(side) {
+    const s = S.sub;
+    s.v += (side === 'att' ? 1 : -1) * (2 + (side === 'att' ? s.attStat : s.defStat) / 30);
+  }
+  function tickSub(t) {
+    const s = S.sub;
+    const dt = (t - s.last) / 1000;
+    s.last = t;
+    for (const side of ['att', 'def']) {
+      const color = s[side];
+      if (color === S.human) continue;
+      const stat = side === 'att' ? s.attStat : s.defStat;
+      s.acc[side] += dt * (5.5 + stat / 25);
+      while (s.acc[side] >= 1) { s.acc[side] -= 1; subTap(side); }
+    }
+    s.v = clamp(s.v + dt * (s.attStat - s.defStat) / 100 * 6, 0, 100);
+    const u = s.v / 100;
+    for (const role of ['top', 'bottom']) {
+      const a = actors[colorOf(role)];
+      if (t - a.t0 > a.dur) { const p = blend(s.loose[role], s.tight[role], u); a.from = p; a.to = p; a.dur = 0; }
+    }
+    const pct = s.att === 'red' ? s.v : 100 - s.v;
+    $('sub-fill').style.width = pct + '%';
+    $('sub-mark').style.left = pct + '%';
+    const done = s.v >= 100 ? 'tap' : (s.v <= 0 || t - s.start > 7000) ? 'escape' : null;
+    if (done) { S.sub = null; $('sub').hidden = true; s.resolve(done); }
+  }
+
+  function hurt(color, dmg) {
+    actors[color].health = clamp(actors[color].health - dmg, 0, 100);
+    $(color + '-hp').style.width = actors[color].health + '%';
+  }
+  function fistPoint(color) {
+    const a = actors[color], pose = current(a, now()), { w, oy } = placement(a, pose);
+    const hand = w.rear_hand, part = rig.parts[partFor(a, '@hand')];
+    const p = local(hand, part, part.size[0] / 2, part.size[1] * 0.85);
+    return { x: CENTER + flip() * pose.x + a.facing * p.x, y: oy + p.y };
+  }
+
+  async function finish(winner, how, detail) {
+    S.over = true;
+    moveRef('ref_stop', CENTER + 150, 450);
+    banner(how, label(winner) + ' wins by ' + detail.toLowerCase(), 0);
+    log(label(winner) + ' wins by ' + how.toLowerCase(), detail);
+    updateUI();
+  }
+
+  // ---------- CPU ----------
+  function cpuThink(t) {
+    if (S.busy || S.over || S.timing || S.sub || t < S.nextCpu) return;
+    const cpu = other(S.human), s = stats(cpu);
+    if (!S.position) {
+      if (Math.random() < 0.35 + s.takedowns / 200) shoot(cpu);
+      S.nextCpu = t + rand(1800, 3400);
+      return;
+    }
+    if (roleOf(cpu) === 'top') {
+      S.nextCpu = t + rand(900, 1500);
+      const r = Math.random();
+      if (canSubmit(cpu) && t > S.subReady && r < 0.12 + (100 - actors[S.human].health) / 400) submit();
+      else if (NEXT[S.position] && r < 0.35) advance();
+      else punch();
+    } else {
+      S.nextCpu = t + rand(2200, 3800);
+      if (canSubmit(cpu) && t > S.subReady && Math.random() < s.guard / 300) submit();
+      else sweep();
+    }
+  }
+
+  // ---------- Input ----------
+  function input(key) {
+    if (S.timing) { if (key === ' ') pressTiming(); return; }
+    if (S.sub) {
+      if (key === ' ' || key === 'k' || key === 'l') {
+        if (S.human === S.sub.att) subTap('att');
+        else if (S.human === S.sub.def) subTap('def');
+      }
+      return;
+    }
+    if (S.over) return;
+    const me = S.human;
+    if (!S.position) { if (key === 's') shoot(me); return; }
+    const role = roleOf(me);
+    if (key === 'l' && role === 'bottom') return block();
+    if (S.busy) return;
+    if (role === 'top') {
+      if (key === 'j') punch();
+      else if (key === 'w') advance();
+      else if (key === 'k' && canSubmit(me)) submit();
+    } else {
+      if (key === 's') sweep();
+      else if (key === 'k' && canSubmit(me)) submit();
+    }
+  }
+  addEventListener('keydown', e => {
+    if (e.target.closest('select') || e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+    const key = e.key === ' ' ? ' ' : e.key.toLowerCase();
+    if (!'sjlwk '.includes(key)) return;
+    if (key === ' ') e.preventDefault();
+    input(key);
+  });
+  document.querySelectorAll('button.act').forEach(b => b.addEventListener('click', () => input(b.dataset.act)));
+
+  function updateUI() {
+    const me = S.human, role = S.position ? roleOf(me) : null;
+    const set = S.position && data.overlays[S.position];
+    const live = !S.over && !S.busy;
+    const en = {
+      s: live && (!S.position || role === 'bottom'),
+      j: live && role === 'top',
+      l: !S.over && role === 'bottom' && !S.sub && !S.timing,
+      w: live && role === 'top' && !!NEXT[S.position],
+      k: live && !!S.position && canSubmit(me),
+      ' ': !!S.timing || !!S.sub
+    };
+    document.querySelectorAll('button.act').forEach(b => {
+      b.disabled = !en[b.dataset.act];
+      b.classList.toggle('hot', b.dataset.act === ' ' && en[' ']);
+    });
+    const sBtn = document.querySelector('button[data-act="s"] span');
+    sBtn.textContent = !S.position ? 'Shoot' : S.position === 'side' ? 'Escape' : 'Sweep';
+    const kBtn = document.querySelector('button[data-act="k"] span');
+    kBtn.textContent = set && set.sub_name ? set.sub_name : 'Submit';
+    $('pos').textContent = S.position ? POS_NAME[S.position] + ' \u00b7 ' + label(colorOf('top')) + ' on top' : 'Standing';
+
+    let msg;
+    if (S.over) msg = 'Fight over. Press Restart fight to go again.';
+    else if (S.timing) msg = S.timing.title + ' Press Space when the needle is in the green.';
+    else if (S.sub) msg = S.human === S.sub.att ? 'Mash Space to finish the ' + S.sub.set.sub_name.toLowerCase() + '.' : S.human === S.sub.def ? 'Mash Space to escape.' : '';
+    else if (!S.position) msg = 'You are ' + label(me) + '. Press S to shoot a double-leg, or wait and defend when ' + label(other(me)) + ' shoots.';
+    else if (role === 'top') msg = 'You are on top in ' + POS_NAME[S.position].toLowerCase() + '. J punch' + (NEXT[S.position] ? ', W advance' : '') + (canSubmit(me) ? ', K ' + set.sub_name.toLowerCase() : '') + '.';
+    else msg = 'You are on the bottom in ' + POS_NAME[S.position].toLowerCase() + '. L block, S ' + SWEEP[S.position].name.toLowerCase() + (canSubmit(me) ? ', K ' + set.sub_name.toLowerCase() : '') + '.';
+    $('prompt').textContent = msg;
+  }
+
+  function buildStats() {
+    const keys = [['takedowns', 'Takedowns'], ['td_defense', 'TD defense'], ['top', 'Top control'], ['guard', 'Guard'], ['power', 'Power']];
+    const r = stats('red'), b = stats('blue');
+    let html = '<tr><th>Stat</th><th colspan="2" style="color:var(--red)">Red &middot; ' + r.label + '</th><th colspan="2" style="color:var(--blue)">Blue &middot; ' + b.label + '</th></tr>';
+    for (const [k, name] of keys) {
+      html += '<tr><td>' + name + '</td>' +
+        '<td class="num">' + r[k] + '</td><td style="width:28%;padding:0 12px 0 8px"><div class="mini red"><i style="width:' + r[k] + '%"></i></div></td>' +
+        '<td class="num">' + b[k] + '</td><td style="width:28%;padding-left:8px"><div class="mini blue"><i style="width:' + b[k] + '%"></i></div></td></tr>';
+    }
+    $('stats').innerHTML = html;
+    $('red-style').textContent = r.label;
+    $('blue-style').textContent = b.label;
+  }
+
+  function restart() {
+    gen++;
+    Object.assign(S, { topIsRed: true, position: null, subReady: 0, busy: false, over: false, nextCpu: now() + 2500, timing: null, sub: null, blockAt: -1e9, shake: 0, sparks: [] });
+    $('timing').hidden = true; $('sub').hidden = true;
+    $('banner').classList.remove('show');
+    for (const c of ['red', 'blue']) { actors[c].health = 100; $(c + '-hp').style.width = '100%'; actors[c].to = null; }
+    show('neutral', 0);
+    actors.ref.to = null;
+    S.refFrom = S.refX = 640; S.refDur = 0;
+    setPose(actors.ref, resolve(data.poses.ref_stand), 0);
+    $('log').innerHTML = '';
+    log('Fight starts', label('red') + ' (' + stats('red').label + ') vs ' + label('blue') + ' (' + stats('blue').label + ')');
+    buildStats();
+    updateUI();
+  }
+
+  function setup() {
+    for (const c of ['red', 'blue']) {
+      const sel = $('style-' + c);
+      for (const [id, s] of Object.entries(data.styles)) sel.add(new Option(s.label, id, false, id === actors[c].style));
+      sel.addEventListener('change', () => { actors[c].style = sel.value; restart(); });
+    }
+    $('human').addEventListener('change', e => { S.human = e.target.value; restart(); });
+    $('restart').addEventListener('click', restart);
+  }
+
+  // ---------- Drawing ----------
+  function readColors() {
+    const cs = getComputedStyle(document.documentElement);
+    for (const name of ['wall', 'wall-2', 'fence', 'post', 'mat', 'mat-line', 'shadow', 'ink', 'gold'])
+      colors[name] = cs.getPropertyValue('--' + name).trim();
+  }
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', readColors);
+  new MutationObserver(readColors).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  function resize() {
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    const cssW = canvas.getBoundingClientRect().width || W;
+    canvas.width = Math.round(cssW * dpr);
+    canvas.height = Math.round(cssW * H / W * dpr);
+    scale = canvas.width / W;
+  }
+  addEventListener('resize', resize);
+
+  function drawScene() {
+    const g = ctx.createLinearGradient(0, 0, 0, FLOOR);
+    g.addColorStop(0, colors['wall-2']);
+    g.addColorStop(1, colors.wall);
+    ctx.fillStyle = g;
+    ctx.fillRect(-20, -20, W + 40, H + 40);
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, 30, W, 300); ctx.clip();
+    ctx.strokeStyle = colors.fence; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let x = -320; x < W + 320; x += 24) {
+      ctx.moveTo(x, 30); ctx.lineTo(x + 300, 330);
+      ctx.moveTo(x + 300, 30); ctx.lineTo(x, 330);
+    }
+    ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = colors.post;
+    ctx.fillRect(-20, 24, W + 40, 8);
+    ctx.fillRect(36, 24, 16, 310);
+    ctx.fillRect(W - 52, 24, 16, 310);
+    ctx.fillStyle = colors.mat;
+    ctx.fillRect(-20, 330, W + 40, H - 310);
+    ctx.fillStyle = colors['mat-line'];
+    ctx.fillRect(-20, 330, W + 40, 3);
+  }
+
+  function drawActor(actor, x, groups, frame) {
+    const s = actor.scale || 1;
+    for (const e of rig.draw) {
+      if (groups && !groups.includes(groupOf(e))) continue;
+      const key = partFor(actor, e.part), part = rig.parts[key], t = frame.w[e.bone];
+      ctx.save();
+      ctx.translate(x, frame.oy);
+      ctx.scale(actor.facing * s, s);
+      ctx.translate(t.x, t.y);
+      ctx.rotate(t.a * D);
+      const im = images[actor.color][key];
+      ctx.drawImage(e.far ? im.far : im.near, -part.pivot[0], -part.pivot[1], part.size[0], part.size[1]);
+      ctx.restore();
+    }
+  }
+  function drawShadow(x, width) {
+    ctx.fillStyle = colors.shadow;
+    ctx.beginPath();
+    ctx.ellipse(x, FLOOR - 1, width, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  function drawSparks(t) {
+    S.sparks = S.sparks.filter(s => t - s.t < 220);
+    for (const s of S.sparks) {
+      const u = (t - s.t) / 220, r = (s.big ? 26 : 14) * (0.5 + u);
+      ctx.save();
+      ctx.globalAlpha = 1 - u;
+      ctx.strokeStyle = s.big ? colors.gold : colors.ink;
+      ctx.lineWidth = s.big ? 3 : 2;
+      ctx.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const a = i / 8 * Math.PI * 2 + 0.3;
+        ctx.moveTo(s.x + Math.cos(a) * r * 0.45, s.y + Math.sin(a) * r * 0.45);
+        ctx.lineTo(s.x + Math.cos(a) * r, s.y + Math.sin(a) * r);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  function frame(t) {
+    if (S.timing) {
+      $('timing-needle').style.left = (needlePos(S.timing) * 100) + '%';
+      if (t - S.timing.start > S.timing.period * 2.2) endTiming(0);
+    }
+    if (S.sub) tickSub(t);
+    cpuThink(t);
+
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    if (S.shake > 0.2) { ctx.translate(rand(-S.shake, S.shake), rand(-S.shake, S.shake)); S.shake *= 0.85; }
+    drawScene();
+
+    const ref = actors.ref, refPose = current(ref, t), refFrame = placement(ref, refPose), rx = refWorldX();
+    drawShadow(rx, 46);
+    drawActor(ref, rx, null, refFrame);
+
+    const frames = {};
+    for (const c of ['red', 'blue']) {
+      const a = actors[c], pose = current(a, t);
+      frames[c] = { pose, x: CENTER + flip() * pose.x, ...placement(a, pose) };
+    }
+    drawShadow((frames.red.x + frames.blue.x) / 2, 120 + Math.abs(frames.red.x - frames.blue.x) / 2);
+    for (const layer of S.layers) {
+      const [role, group] = layer.split('.');
+      const c = colorOf(role);
+      drawActor(actors[c], frames[c].x, group === 'all' ? null : [group], frames[c]);
+    }
+    drawSparks(t);
+    requestAnimationFrame(frame);
+  }
+
+  // Debug hook for tuning poses: __pose('mount', {top:'top_punch'}) or __pose('guard', null, 0.8) for a submission.
+  window.__pose = (pair, overs, subU) => {
+    gen++;
+    S.busy = true;
+    S.position = data.overlays[pair] ? pair : null;
+    show(pair, 0, {});
+    if (overs) for (const [role, name] of Object.entries(overs)) setPose(actors[colorOf(role)], targetFor(role, pair, overlay(role, name)), 0);
+    if (subU !== undefined) {
+      const set = data.overlays[pair];
+      for (const role of ['top', 'bottom']) {
+        const p = blend(targetFor(role, pair, set.sub_loose[role]), targetFor(role, pair, set.sub_tight[role]), subU);
+        setPose(actors[colorOf(role)], p, 0);
+      }
+    }
+  };
+
+  async function boot() {
+    try {
+      [rig, data] = await Promise.all([getJSON('rig.json'), getJSON('grappling.json')]);
+      await loadParts();
+    } catch (err) {
+      $('status').textContent = 'The fighter files did not load (' + err.message + '). Open this page through a local web server, for example "npx serve art/example-fighter", not straight from disk.';
+      return;
+    }
+    $('status').hidden = true;
+    $('hud').hidden = false;
+    readColors();
+    setup();
+    restart();
+    resize();
+    requestAnimationFrame(frame);
+  }
+  boot();
+})();
+</script>

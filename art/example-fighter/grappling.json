@@ -1,0 +1,83 @@
+{
+  "notes": "Poses are angles in degrees relative to the parent bone, written for a fighter facing right. 'root' sets the whole-body rotation (rot) and how far the body is lifted off the mat (lift). Pairs place two fighters together: the top fighter faces right, the bottom fighter is mirrored to face left, and x is measured from the middle of the mat. Overlays change a few bones on top of a pair's base pose.",
+  "poses": {
+    "stance":       { "torso": 8, "head": -6, "lead_upper": -50, "lead_fore": -120, "lead_hand": 10, "rear_upper": -30, "rear_fore": -145, "rear_hand": 10, "lead_thigh": -25, "lead_shin": 20, "rear_thigh": 18, "rear_shin": 10 },
+    "level":        { "torso": 35, "head": -30, "lead_upper": -70, "lead_fore": -50, "rear_upper": -55, "rear_fore": -60, "lead_thigh": -70, "lead_shin": 85, "rear_thigh": 30, "rear_shin": 35 },
+    "frame":        { "torso": 25, "head": -15, "lead_upper": -55, "lead_fore": -15, "rear_upper": -45, "rear_fore": -20, "lead_thigh": -10, "lead_shin": 15, "rear_thigh": 35, "rear_shin": 10 },
+    "shot":         { "torso": 60, "head": -50, "lead_upper": -145, "lead_fore": 25, "rear_upper": -140, "rear_fore": 30, "lead_thigh": -85, "lead_shin": 80, "rear_thigh": 8, "rear_shin": 82, "rear_foot": 90 },
+    "whizzer":      { "torso": -8, "head": 5, "lead_upper": -27, "lead_fore": -10, "rear_upper": -20, "rear_fore": -15, "lead_thigh": -8, "lead_shin": 6, "rear_thigh": 12, "rear_shin": 4 },
+    "sprawled_on":  { "torso": 85, "head": -20, "lead_upper": -120, "lead_fore": 30, "rear_upper": -110, "rear_fore": 20, "lead_thigh": -20, "lead_shin": 110, "lead_foot": 90, "rear_thigh": -10, "rear_shin": 100, "rear_foot": 90 },
+    "sprawl":       { "root": { "rot": 60 }, "torso": 10, "head": -30, "lead_upper": -60, "lead_fore": 0, "rear_upper": -50, "rear_fore": 10, "lead_thigh": 25, "lead_shin": 0, "rear_thigh": 35, "rear_shin": -5 },
+    "drive":        { "torso": 65, "head": -45, "lead_upper": -140, "lead_fore": 30, "rear_upper": -135, "rear_fore": 35, "lead_thigh": -60, "lead_shin": 40, "rear_thigh": 30, "rear_shin": 30 },
+    "falling":      { "root": { "rot": -50, "lift": 45 }, "torso": 0, "head": 25, "lead_upper": -110, "lead_fore": -40, "rear_upper": -100, "rear_fore": -50, "lead_thigh": -40, "lead_shin": 30, "rear_thigh": -55, "rear_shin": 40 },
+    "guard_top":    { "torso": 15, "head": -10, "lead_upper": -45, "lead_fore": -30, "rear_upper": -35, "rear_fore": -40, "lead_thigh": -15, "lead_shin": 105, "lead_foot": 90, "rear_thigh": -10, "rear_shin": 100, "rear_foot": 90 },
+    "guard_bottom": { "root": { "rot": -90 }, "torso": 0, "head": 20, "lead_upper": -60, "lead_fore": -40, "rear_upper": -70, "rear_fore": -50, "lead_thigh": -45, "lead_shin": 45, "lead_foot": 40, "rear_thigh": -50, "rear_shin": 50, "rear_foot": 40 },
+    "side_top":     { "torso": 75, "head": -30, "lead_upper": -110, "lead_fore": -30, "rear_upper": -60, "rear_fore": -60, "lead_thigh": -40, "lead_shin": 130, "lead_foot": 90, "rear_thigh": -30, "rear_shin": 120, "rear_foot": 90 },
+    "side_bottom":  { "root": { "rot": -90 }, "torso": 0, "head": 10, "lead_upper": -60, "lead_fore": -90, "rear_upper": -100, "rear_fore": -70, "lead_thigh": -45, "lead_shin": 90, "rear_thigh": -40, "rear_shin": 85 },
+    "mount_top":    { "torso": 8, "head": -8, "lead_upper": -40, "lead_fore": -20, "rear_upper": -30, "rear_fore": -40, "lead_thigh": -60, "lead_shin": 150, "lead_foot": 90, "rear_thigh": -55, "rear_shin": 145, "rear_foot": 90 },
+    "mount_bottom": { "root": { "rot": -90 }, "torso": 0, "head": 10, "lead_upper": -55, "lead_fore": -40, "rear_upper": -65, "rear_fore": -50, "lead_thigh": -25, "lead_shin": 45, "rear_thigh": -15, "rear_shin": 30 },
+    "ref_stand":    { "torso": 0, "head": 0, "lead_upper": -10, "lead_fore": -10, "rear_upper": 5, "rear_fore": -10, "lead_thigh": -8, "lead_shin": 8, "rear_thigh": 8, "rear_shin": 0 },
+    "ref_watch":    { "torso": 35, "head": -25, "lead_upper": -20, "lead_fore": 10, "rear_upper": -15, "rear_fore": 5, "lead_thigh": -30, "lead_shin": 40, "rear_thigh": 10, "rear_shin": 30 },
+    "ref_stop":     { "torso": 25, "head": -15, "lead_upper": -150, "lead_fore": -10, "rear_upper": -100, "rear_fore": -20, "lead_thigh": -45, "lead_shin": 50, "rear_thigh": 30, "rear_shin": 10 }
+  },
+  "pairs": {
+    "neutral":     { "top": { "pose": "stance", "x": -110 }, "bottom": { "pose": "stance", "x": 110 } },
+    "level":       { "top": { "pose": "level", "x": -85 }, "bottom": { "pose": "stance", "x": 110 } },
+    "level_stuff": { "top": { "pose": "stance", "x": -150 }, "bottom": { "pose": "frame", "x": 70 } },
+    "grab":        { "top": { "pose": "shot", "x": -25 }, "bottom": { "pose": "whizzer", "x": 100 },
+                     "layers": ["top.far_arm", "bottom.far_leg", "bottom.far_arm", "bottom.body", "bottom.near_leg", "top.far_leg", "top.body", "top.near_leg", "top.near_arm", "bottom.near_arm"] },
+    "sprawl":      { "top": { "pose": "sprawled_on", "x": -40 }, "bottom": { "pose": "sprawl", "x": 40 },
+                     "layers": ["top.all", "bottom.all"] },
+    "drive":       { "top": { "pose": "drive", "x": 20 }, "bottom": { "pose": "falling", "x": 120 },
+                     "layers": ["top.far_arm", "bottom.all", "top.far_leg", "top.body", "top.near_leg", "top.near_arm"] },
+    "guard":       { "top": { "pose": "guard_top", "x": -35 }, "bottom": { "pose": "guard_bottom", "x": 50 },
+                     "layers": ["bottom.far_leg", "bottom.far_arm", "bottom.body", "top.all", "bottom.near_leg", "bottom.near_arm"] },
+    "side":        { "top": { "pose": "side_top", "x": -20 }, "bottom": { "pose": "side_bottom", "x": -50 },
+                     "layers": ["top.far_arm", "top.far_leg", "top.near_leg", "bottom.all", "top.body", "top.near_arm"] },
+    "mount":       { "top": { "pose": "mount_top", "x": 8 }, "bottom": { "pose": "mount_bottom", "x": -55 },
+                     "layers": ["top.far_arm", "top.far_leg", "bottom.all", "top.body", "top.near_leg", "top.near_arm"] }
+  },
+  "overlays": {
+    "guard": {
+      "top_cock":    { "torso": 5, "rear_upper": 35, "rear_fore": -135 },
+      "top_punch":   { "torso": 30, "rear_upper": -60, "rear_fore": -5 },
+      "bottom_block": { "head": 30, "lead_upper": -110, "lead_fore": -70, "rear_upper": -115, "rear_fore": -65 },
+      "bottom_hit":  { "head": -5 },
+      "bottom_try":  { "root": { "rot": -75, "lift": 6 }, "lead_thigh": -80, "lead_shin": 30, "rear_thigh": -20, "rear_shin": 60 },
+      "sub_name": "Armbar",
+      "sub_by": "bottom",
+      "sub_loose": { "bottom": { "root": { "x": -30, "rot": -80, "lift": 35 }, "head": 25, "lead_thigh": -90, "lead_shin": 50, "lead_foot": 30, "rear_thigh": -95, "rear_shin": 65, "rear_foot": 30, "lead_upper": -75, "lead_fore": -30, "rear_upper": -70, "rear_fore": -40 },
+                     "top": { "torso": 30, "head": -5, "lead_upper": -56, "lead_fore": 0, "lead_hand": 0 } },
+      "sub_tight": { "bottom": { "root": { "x": -30, "rot": -75, "lift": 42 }, "head": 35, "lead_thigh": -95, "lead_shin": 45, "lead_foot": 30, "rear_thigh": -100, "rear_shin": 55, "rear_foot": 30, "lead_upper": -70, "lead_fore": -20, "rear_upper": -65, "rear_fore": -30 },
+                     "top": { "torso": 15, "head": -30, "lead_upper": -45, "lead_fore": 5, "lead_hand": 0 } }
+    },
+    "side": {
+      "top_cock":    { "torso": 55, "rear_upper": 30, "rear_fore": -130 },
+      "top_punch":   { "torso": 70, "rear_upper": -20, "rear_fore": -10 },
+      "bottom_block": { "head": 30, "lead_upper": -110, "lead_fore": -70, "rear_upper": -115, "rear_fore": -65 },
+      "bottom_hit":  { "head": -5 },
+      "bottom_try":  { "root": { "rot": -80, "lift": 4 }, "lead_thigh": -70, "lead_shin": 70, "lead_upper": -40, "lead_fore": -60 }
+    },
+    "mount": {
+      "top_cock":    { "torso": 0, "rear_upper": 40, "rear_fore": -135 },
+      "top_punch":   { "torso": 30, "rear_upper": -57, "rear_fore": -5 },
+      "bottom_block": { "head": 30, "lead_upper": -110, "lead_fore": -70, "rear_upper": -115, "rear_fore": -65 },
+      "bottom_hit":  { "head": -5 },
+      "bottom_try":  { "root": { "rot": -78, "lift": 14 }, "lead_thigh": -60, "lead_shin": 100, "rear_thigh": -55, "rear_shin": 95 },
+      "sub_name": "Arm-triangle choke",
+      "sub_by": "top",
+      "sub_loose": { "top": { "torso": 80, "head": -20, "lead_upper": -150, "lead_fore": -60, "rear_upper": -140, "rear_fore": -80 },
+                     "bottom": { "head": 20, "lead_upper": -150, "lead_fore": -20 } },
+      "sub_tight": { "top": { "root": { "lift": -6 }, "torso": 92, "head": -30, "lead_upper": -160, "lead_fore": -80, "rear_upper": -150, "rear_fore": -95 },
+                     "bottom": { "head": 35, "lead_upper": -160, "lead_fore": -10 } }
+    }
+  },
+  "styles": {
+    "wrestling": { "label": "Wrestling", "takedowns": 90, "td_defense": 85, "top": 82, "guard": 40, "power": 65 },
+    "bjj":       { "label": "BJJ",       "takedowns": 55, "td_defense": 50, "top": 70, "guard": 92, "power": 45 },
+    "judo":      { "label": "Judo",      "takedowns": 82, "td_defense": 75, "top": 70, "guard": 60, "power": 55 },
+    "mma":       { "label": "MMA",       "takedowns": 70, "td_defense": 70, "top": 70, "guard": 65, "power": 70 },
+    "muay_thai": { "label": "Muay Thai", "takedowns": 35, "td_defense": 65, "top": 45, "guard": 35, "power": 85 },
+    "karate":    { "label": "Karate",    "takedowns": 30, "td_defense": 55, "top": 40, "guard": 35, "power": 72 }
+  }
+}

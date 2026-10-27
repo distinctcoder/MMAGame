@@ -40,13 +40,15 @@ parts/<part>_<variant>.svg     gear or body variant, e.g. parts/glove_mt_red.svg
 
 ## What the full game will need beyond this sample
 
-**Hands for grappling.** Gloves cover striking. Grappling needs hand poses that swap in for the open-finger MMA glove: `hand_open` (frames, posts), `hand_grip` (collar, wrist and underhook grips) and `hand_fist` (MMA glove, closed).
+**Hands for grappling.** Gloves cover striking. Grappling needs hand poses that swap in for the open-finger MMA glove: `hand_open` (frames, posts; a first version is in `parts/`), `hand_grip` (collar, wrist and underhook grips) and `hand_fist` (MMA glove, closed).
+
+**Referee.** Shirt, pants, shoes and sleeve variants of the base parts are in `parts/*_ref.svg`.
 
 **Faces.** Three or four head variants with the same pivot: neutral, effort (gritted teeth), hurt, and knocked out.
 
 **Body types.** Light, middle and heavy builds. Each is a full set of the nine parts. Bone lengths can also change per fighter in `rig.json` for reach and height.
 
-**Skin tones.** Each skin part will be split into a skin layer and an outline/detail layer, so tone becomes a palette swap instead of redrawing.
+**Skin tones.** Skin uses three fixed colors (`#c68a5e` base, `#a86f47` shade, `#b67a50` ear) and hair uses `#1f1510`, so the game can swap tones at load time. Keep to those exact colors.
 
 **Gear for park mode.** Each item replaces one or two parts on the same canvas and pivot:
 - Gloves: Muay Thai, boxing, MMA 4oz, BJJ (bare hands with tape)
@@ -70,4 +72,14 @@ parts/<part>_<variant>.svg     gear or body variant, e.g. parts/glove_mt_red.svg
 
 - `rig.json` lists the parts, the bones, where each bone attaches to its parent, and the draw order.
 - `animations.json` lists poses (an angle per bone, in degrees, relative to the parent bone) and animations (timed lists of poses). The engine blends between poses, keeps the lowest foot on the mat, and fires events such as `impact` at set times.
-- Grappling uses the same parts with **paired poses**: one keyframe holds both fighters' skeletons plus their offset from each other, so a double-leg takedown or a mount transition is authored as one animation for two bodies.
+- Grappling uses the same parts with **paired poses** in [`grappling.json`](../art/example-fighter/grappling.json). See the next section.
+
+## Grappling: paired poses
+
+The grappling prototype is [`art/example-fighter/grappling.html`](../art/example-fighter/grappling.html). It needs no extra fighter art; everything is built from the same nine parts.
+
+- **Pairs.** A pair (`neutral`, `level`, `grab`, `sprawl`, `drive`, `guard`, `side`, `mount`) names a pose for the *top* fighter (faces right) and the *bottom* fighter (mirrored to face left), plus each one's distance from the middle of the mat. When the bottom fighter sweeps, the whole scene mirrors, so the same pair data works whichever corner is on top.
+- **Layers.** Grappling bodies wrap around each other, so a pair lists its draw order by body group: `far_arm`, `far_leg`, `body`, `near_leg`, `near_arm`. In closed guard, for example, the bottom fighter's near leg is drawn in front of the top fighter and the far leg behind.
+- **Overlays.** Small edits on top of a position: `top_cock` and `top_punch` for ground and pound, `bottom_block`, `bottom_hit`, and `bottom_try` for a sweep attempt. Submissions have a `sub_loose` and a `sub_tight` pose, and the game blends between them as the submission meter moves.
+- **Resting on the mat.** Each part lists a few `hull` points on its outline in `rig.json`. The engine sets the lowest hull point on the mat, so lying, kneeling and sprawling bodies sit on the floor without hand-placed heights. `lift` raises a body off the mat, as in the mid-air frame of a takedown.
+- **Palette swaps.** Corner colors, skin tones and the referee's outfit come from swapping colors in the SVGs at load time (`recolor` in the page), not from separate drawings. That is why base parts use a small, fixed set of colors.

@@ -5,71 +5,94 @@
   "conventions": "Each bone points down (+y) at 0 degrees. Negative angles swing a limb forward (toward +x). 'at' is where the bone attaches, in its parent's local space.",
   "farTint": "rgba(22, 14, 34, 0.30)",
   "parts": {
-    "head":         { "file": "parts/head.svg",         "size": [50, 60],  "pivot": [21, 56] },
-    "torso":        { "file": "parts/torso.svg",        "size": [66, 112], "pivot": [30, 108] },
-    "pelvis_mt":    { "file": "parts/pelvis_mt.svg",    "size": [60, 46],  "pivot": [30, 8] },
-    "pelvis_mma":   { "file": "parts/pelvis_mma.svg",   "size": [60, 46],  "pivot": [30, 8] },
-    "upper_arm":    { "file": "parts/upper_arm.svg",    "size": [26, 66],  "pivot": [13, 9] },
-    "forearm":      { "file": "parts/forearm.svg",      "size": [22, 56],  "pivot": [11, 6] },
-    "glove_mt_red": { "file": "parts/glove_mt_red.svg", "size": [36, 44],  "pivot": [16, 5] },
-    "glove_mt_blue":{ "file": "parts/glove_mt_blue.svg","size": [36, 44],  "pivot": [16, 5] },
-    "glove_mma":    { "file": "parts/glove_mma.svg",    "size": [30, 36],  "pivot": [14, 5] },
-    "thigh_mt":     { "file": "parts/thigh_mt.svg",     "size": [38, 84],  "pivot": [19, 10] },
-    "thigh_mma":    { "file": "parts/thigh_mma.svg",    "size": [38, 84],  "pivot": [19, 10] },
-    "shin":         { "file": "parts/shin.svg",         "size": [28, 76],  "pivot": [14, 6] },
-    "foot":         { "file": "parts/foot.svg",         "size": [46, 22],  "pivot": [10, 5] }
+    "head": { "file": "parts/head.svg", "size": [50, 60], "pivot": [21, 56], "hull": [[8, 22], [27, 3], [44, 20], [43, 36], [22, 46], [14, 58], [29, 58]] },
+    "torso": { "file": "parts/torso.svg", "size": [66, 112], "pivot": [30, 108], "hull": [[16, 14], [49, 10], [57, 30], [55, 46], [46, 76], [43, 110], [17, 110], [12, 74], [10, 40]] },
+    "pelvis_mt": { "file": "parts/pelvis_mt.svg", "size": [60, 46], "pivot": [30, 8], "hull": [[8, 4], [52, 4], [55, 34], [30, 37], [5, 34]] },
+    "pelvis_mma": { "file": "parts/pelvis_mma.svg", "size": [60, 46], "pivot": [30, 8], "hull": [[8, 4], [52, 4], [55, 34], [30, 37], [5, 34]] },
+    "upper_arm": { "file": "parts/upper_arm.svg", "size": [26, 66], "pivot": [13, 9], "hull": [[4, 8], [13, 2], [22, 8], [18, 62], [13, 64], [8, 62]] },
+    "forearm": { "file": "parts/forearm.svg", "size": [22, 56], "pivot": [11, 6], "hull": [[3, 5], [19, 5], [15, 53], [7, 53]] },
+    "glove_mt_red": { "file": "parts/glove_mt_red.svg", "size": [36, 44], "pivot": [16, 5], "hull": [[3, 16], [3, 32], [8, 39], [20, 42], [31, 36], [33, 22]] },
+    "glove_mt_blue": { "file": "parts/glove_mt_blue.svg", "size": [36, 44], "pivot": [16, 5], "hull": [[3, 16], [3, 32], [8, 39], [20, 42], [31, 36], [33, 22]] },
+    "glove_mma": { "file": "parts/glove_mma.svg", "size": [30, 36], "pivot": [14, 5], "hull": [[4, 14], [4, 26], [9, 31], [22, 31], [26, 20]] },
+    "thigh_mt": { "file": "parts/thigh_mt.svg", "size": [38, 84], "pivot": [19, 10], "hull": [[3, 3], [35, 3], [36, 32], [11, 80], [19, 82], [27, 80], [6, 40], [32, 40]] },
+    "thigh_mma": { "file": "parts/thigh_mma.svg", "size": [38, 84], "pivot": [19, 10], "hull": [[3, 3], [35, 3], [36, 32], [11, 80], [19, 82], [27, 80], [6, 40], [32, 40]] },
+    "shin": { "file": "parts/shin.svg", "size": [28, 76], "pivot": [14, 6], "hull": [[5, 10], [3, 30], [6, 46], [10, 75], [18, 75], [22, 24], [20, 2], [7, 2]] },
+    "foot": { "file": "parts/foot.svg", "size": [46, 22], "pivot": [10, 5], "hull": [[4, 3], [3, 15], [5, 19], [41, 19], [43, 15], [17, 2]] },
+    "hand_open": { "file": "parts/hand_open.svg", "size": [28, 36], "pivot": [12, 4], "hull": [[5, 3], [19, 3], [25, 22], [20, 31], [6, 31], [4, 15]] },
+    "torso_ref": { "file": "parts/torso_ref.svg", "size": [66, 112], "pivot": [30, 108], "hull": [[16, 14], [49, 10], [57, 30], [55, 46], [46, 76], [43, 110], [17, 110], [12, 74], [10, 40]] },
+    "upper_arm_ref": { "file": "parts/upper_arm_ref.svg", "size": [26, 66], "pivot": [13, 9], "hull": [[4, 8], [13, 2], [22, 8], [18, 62], [13, 64], [8, 62]] },
+    "pelvis_ref": { "file": "parts/pelvis_ref.svg", "size": [60, 46], "pivot": [30, 8], "hull": [[8, 4], [52, 4], [55, 34], [30, 37], [5, 34]] },
+    "thigh_ref": { "file": "parts/thigh_ref.svg", "size": [38, 84], "pivot": [19, 10], "hull": [[3, 3], [35, 3], [36, 32], [11, 80], [19, 82], [27, 80], [6, 40], [32, 40]] },
+    "shin_ref": { "file": "parts/shin_ref.svg", "size": [28, 76], "pivot": [14, 6], "hull": [[5, 10], [3, 30], [6, 46], [10, 75], [18, 75], [22, 24], [20, 2], [7, 2]] },
+    "foot_ref": { "file": "parts/foot_ref.svg", "size": [46, 22], "pivot": [10, 5], "hull": [[4, 3], [3, 15], [5, 19], [41, 19], [43, 15], [17, 2]] }
   },
   "bones": [
-    { "id": "root",       "parent": null },
-    { "id": "torso",      "parent": "root",       "at": [0, -4] },
-    { "id": "head",       "parent": "torso",      "at": [4, -100] },
-    { "id": "lead_upper", "parent": "torso",      "at": [2, -88] },
-    { "id": "lead_fore",  "parent": "lead_upper", "at": [0, 54] },
-    { "id": "lead_hand",  "parent": "lead_fore",  "at": [0, 46] },
-    { "id": "rear_upper", "parent": "torso",      "at": [2, -88] },
-    { "id": "rear_fore",  "parent": "rear_upper", "at": [0, 54] },
-    { "id": "rear_hand",  "parent": "rear_fore",  "at": [0, 46] },
-    { "id": "lead_thigh", "parent": "root",       "at": [3, 12] },
-    { "id": "lead_shin",  "parent": "lead_thigh", "at": [0, 70] },
-    { "id": "lead_foot",  "parent": "lead_shin",  "at": [0, 66], "level": true, "sole": [[-6, 14], [32, 14]] },
-    { "id": "rear_thigh", "parent": "root",       "at": [-3, 12] },
-    { "id": "rear_shin",  "parent": "rear_thigh", "at": [0, 70] },
-    { "id": "rear_foot",  "parent": "rear_shin",  "at": [0, 66], "level": true, "sole": [[-6, 14], [32, 14]] }
+    { "id": "root", "parent": null },
+    { "id": "torso", "parent": "root", "at": [0, -4] },
+    { "id": "head", "parent": "torso", "at": [4, -100] },
+    { "id": "lead_upper", "parent": "torso", "at": [2, -88] },
+    { "id": "lead_fore", "parent": "lead_upper", "at": [0, 54] },
+    { "id": "lead_hand", "parent": "lead_fore", "at": [0, 46] },
+    { "id": "rear_upper", "parent": "torso", "at": [2, -88] },
+    { "id": "rear_fore", "parent": "rear_upper", "at": [0, 54] },
+    { "id": "rear_hand", "parent": "rear_fore", "at": [0, 46] },
+    { "id": "lead_thigh", "parent": "root", "at": [3, 12] },
+    { "id": "lead_shin", "parent": "lead_thigh", "at": [0, 70] },
+    { "id": "lead_foot", "parent": "lead_shin", "at": [0, 66], "level": true, "sole": [[-6, 14], [32, 14]] },
+    { "id": "rear_thigh", "parent": "root", "at": [-3, 12] },
+    { "id": "rear_shin", "parent": "rear_thigh", "at": [0, 70] },
+    { "id": "rear_foot", "parent": "rear_shin", "at": [0, 66], "level": true, "sole": [[-6, 14], [32, 14]] }
   ],
   "draw": [
     { "bone": "lead_upper", "part": "upper_arm", "far": true },
-    { "bone": "lead_fore",  "part": "forearm",   "far": true },
-    { "bone": "lead_hand",  "part": "@hand",     "far": true },
-    { "bone": "lead_foot",  "part": "foot",      "far": true },
-    { "bone": "lead_shin",  "part": "shin",      "far": true },
-    { "bone": "lead_thigh", "part": "@thigh",    "far": true },
-    { "bone": "torso",      "part": "torso" },
-    { "bone": "root",       "part": "@pelvis" },
-    { "bone": "rear_foot",  "part": "foot" },
-    { "bone": "rear_shin",  "part": "shin" },
+    { "bone": "lead_fore", "part": "forearm", "far": true },
+    { "bone": "lead_hand", "part": "@hand", "far": true },
+    { "bone": "lead_foot", "part": "foot", "far": true },
+    { "bone": "lead_shin", "part": "shin", "far": true },
+    { "bone": "lead_thigh", "part": "@thigh", "far": true },
+    { "bone": "torso", "part": "torso" },
+    { "bone": "root", "part": "@pelvis" },
+    { "bone": "rear_foot", "part": "foot" },
+    { "bone": "rear_shin", "part": "shin" },
     { "bone": "rear_thigh", "part": "@thigh" },
-    { "bone": "head",       "part": "head" },
+    { "bone": "head", "part": "head" },
     { "bone": "rear_upper", "part": "upper_arm" },
-    { "bone": "rear_fore",  "part": "forearm" },
-    { "bone": "rear_hand",  "part": "@hand" }
+    { "bone": "rear_fore", "part": "forearm" },
+    { "bone": "rear_hand", "part": "@hand" }
   ],
   "gear": {
     "gloves": {
       "label": "Gloves",
       "default": "mt_red",
       "options": {
-        "mt_red":  { "label": "Muay Thai 10oz, red",  "parts": { "@hand": "glove_mt_red" } },
-        "mt_blue": { "label": "Muay Thai 10oz, blue", "parts": { "@hand": "glove_mt_blue" } },
-        "mma":     { "label": "MMA 4oz open-finger",  "parts": { "@hand": "glove_mma" } }
+        "mt_red": {
+          "label": "Muay Thai 10oz, red",
+          "parts": { "@hand": "glove_mt_red" }
+        },
+        "mt_blue": {
+          "label": "Muay Thai 10oz, blue",
+          "parts": { "@hand": "glove_mt_blue" }
+        },
+        "mma": {
+          "label": "MMA 4oz open-finger",
+          "parts": { "@hand": "glove_mma" }
+        }
       }
     },
     "shorts": {
       "label": "Shorts",
       "default": "mt",
       "options": {
-        "mt":  { "label": "Muay Thai satin",  "parts": { "@pelvis": "pelvis_mt",  "@thigh": "thigh_mt" } },
-        "mma": { "label": "MMA board shorts", "parts": { "@pelvis": "pelvis_mma", "@thigh": "thigh_mma" } }
+        "mt": {
+          "label": "Muay Thai satin",
+          "parts": { "@pelvis": "pelvis_mt", "@thigh": "thigh_mt" }
+        },
+        "mma": {
+          "label": "MMA board shorts",
+          "parts": { "@pelvis": "pelvis_mma", "@thigh": "thigh_mma" }
+        }
       }
     }
-  }
+  },
+  "notes_hull": "'hull' lists a few points on each part's outline (image coordinates). The engine uses them to rest a body on the mat when it is lying down or kneeling."
 }
