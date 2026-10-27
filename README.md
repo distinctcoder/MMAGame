@@ -8,4 +8,5 @@ Fighters are built from body-part sprites on a skeleton rather than frame-by-fra
 
 - `art/example-fighter/`: a working sample fighter (parts, rig, animations and a preview page). Run `npx serve art/example-fighter` and open the page.
 - `art/example-fighter/grappling.html`: grappling prototype with a 3-phase takedown (level change, grab, finish), guard, side control and mount, ground and pound with blocks, sweeps and a submission mini-game. Run the same server and open `/grappling.html`.
+- `art/toon-3d/`: toon-shaded 3D test (Three.js). Cel-shaded fighters that read as 2D from the side-on game camera, with cinematic angles for a rear-naked choke, armbar and triangle. Holds are authored as contact points and solved with two-bone IK (`poses.json`). Run `npx serve art/toon-3d`.
 - `docs/SPRITE_SPEC.md`: what an artist needs to deliver for each fighter.

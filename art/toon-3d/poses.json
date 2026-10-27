@@ -1,0 +1,83 @@
+{
+  "notes": "Units are roughly centimeters; the mat is y = 0. 'rot' is [pitch, yaw, roll] in degrees for the pelvis (yaw 90 faces +x, negative pitch leans back). 'spine' and 'head' are relative to the body below them. Hands (lh, rh) and feet (lf, rf) are targets that the arms and legs reach with two-bone IK. A target is a world point [x, y, z]; {l: [...]} in the fighter's own hip frame; {c: [...]} in their own chest frame; or {j: 'blue.neck', o: [...]} next to another joint, offset in that fighter's facing frame (oc uses their chest frame). Poles (lhp, rhp, lfp, rfp) aim elbows and knees: an array is in the fighter's own frame, {w: [...]} is a world direction. 'fd' is a world direction for the toes (default: the way the fighter faces). 'tight' lists only what changes from 'loose'.",
+  "poses": {
+    "standing": {
+      "label": "Face-off",
+      "order": ["red", "blue"],
+      "center": [0, 0, 0],
+      "cine": { "pos": [300, 140, 470], "look": [0, 95, 0], "fov": 30 },
+      "loose": {
+        "red":  { "pelvis": [-55, 93, 0], "rot": [0, 90, 0], "spine": [10, 0, 0], "head": [-8, 0, 0],
+                  "lh": { "c": [7, 12, 30] }, "rh": { "c": [-7, 10, 20] }, "lf": [-35, 7, -12], "rf": [-77, 7, 12] },
+        "blue": { "pelvis": [55, 93, 0], "rot": [0, -90, 0], "spine": [10, 0, 0], "head": [-8, 0, 0],
+                  "lh": { "c": [7, 12, 30] }, "rh": { "c": [-7, 10, 20] }, "lf": [35, 7, 12], "rf": [77, 7, -12] }
+      },
+      "tight": {
+        "red":  { "pelvis": [-55, 90, 0], "spine": [13, 0, 0], "lh": { "c": [7, 10, 32] } },
+        "blue": { "pelvis": [55, 90, 0], "spine": [13, 0, 0], "lh": { "c": [7, 10, 32] } }
+      }
+    },
+    "rnc": {
+      "label": "Rear-naked choke",
+      "order": ["blue", "red"],
+      "center": [20, 0, 0],
+      "cine": { "pos": [270, 95, 250], "look": [10, 45, 0], "fov": 26 },
+      "loose": {
+        "blue": { "pelvis": [22, 13, 0], "rot": [-35, 90, 0], "spine": [12, 0, 0], "head": [15, 0, 0],
+                  "lh": { "c": [7, 8, 13] }, "rh": { "c": [-7, 6, 13] },
+                  "lf": [100, 7, -14], "rf": [100, 7, 14], "lfp": { "w": [0, 1, 0] }, "rfp": { "w": [0, 1, 0] } },
+        "red":  { "pelvis": { "j": "blue.pelvis", "o": [0, 0, -30] }, "rot": [-25, 90, 0], "spine": [18, 0, 12], "head": [10, 0, 8],
+                  "rh": { "j": "blue.neck", "oc": [10, 1, 3] }, "rhp": { "w": [1, -0.4, 0.3] },
+                  "lh": { "j": "blue.head", "oc": [2, 0, -12] }, "lhp": { "w": [-0.2, 1, -1] },
+                  "lf": { "j": "blue.lkn", "o": [-5, -4, -16] }, "lfp": { "w": [0, 0.5, -1] },
+                  "rf": { "j": "blue.rkn", "o": [5, -4, -16] }, "rfp": { "w": [0, 0.5, 1] } }
+      },
+      "tight": {
+        "blue": { "pelvis": [18, 14, 0], "rot": [-45, 90, 0], "head": [25, 0, 0] },
+        "red":  { "rot": [-35, 90, 0], "rh": { "j": "blue.neck", "oc": [12, 0, 2] } }
+      }
+    },
+    "armbar": {
+      "label": "Armbar",
+      "order": ["blue", "red"],
+      "center": [-30, 0, -20],
+      "cine": { "pos": [-240, 200, 200], "look": [-38, 20, -20], "fov": 28 },
+      "loose": {
+        "blue": { "pelvis": [10, 11, 0], "rot": [-90, 90, 0], "spine": [0, 0, 0], "head": [10, 0, 0],
+                  "lh": { "c": [52, -5, 30] }, "lhp": { "w": [0, 1, 0] },
+                  "rh": { "c": [24, 2, 26] }, "rhp": { "w": [0, 1, 0.5] },
+                  "lf": [70, 7, -16], "rf": [70, 7, 16], "lfp": { "w": [0, 1, 0] }, "rfp": { "w": [0, 1, 0] } },
+        "red":  { "pelvis": [-36, 12, -38], "rot": [-90, 0, 0], "spine": [15, 0, 0], "head": [20, 0, 0],
+                  "lh": { "j": "blue.lwr", "o": [6, 2, 0] }, "lhp": { "w": [1, 0, 0] },
+                  "rh": { "j": "blue.lwr", "o": [-6, 2, 0] }, "rhp": { "w": [-1, 0, 0] },
+                  "rf": [-66, 8, 40], "rfp": { "w": [0, 1, 0.4] },
+                  "lf": [-14, 8, 42], "lfp": { "w": [0, 1, 0.4] } }
+      },
+      "tight": {
+        "blue": { "lh": { "c": [60, -5, 34] }, "head": [0, 0, 0], "rh": { "c": [30, 4, 30] } },
+        "red":  { "pelvis": [-36, 18, -40], "spine": [8, 0, 0], "head": [26, 0, 0] }
+      }
+    },
+    "triangle": {
+      "label": "Triangle choke",
+      "order": ["red", "blue"],
+      "center": [5, 0, 0],
+      "cine": { "pos": [-60, 170, 330], "look": [0, 35, 0], "fov": 30 },
+      "loose": {
+        "red":  { "pelvis": [0, 18, 0], "rot": [-95, 90, 0], "spine": [18, 0, 0], "head": [22, 0, 0],
+                  "lh": { "j": "blue.head", "o": [0, 10, 4] }, "lhp": { "w": [0, 0, -1] },
+                  "rh": { "j": "blue.rwr", "o": [0, 2, 0] }, "rhp": { "w": [0, 0, 1] },
+                  "rf": { "j": "blue.neck", "o": [-12, 6, -10] }, "rfp": { "w": [0.3, 1, 0.6] },
+                  "lf": { "j": "blue.neck", "o": [12, -4, -16] }, "lfp": { "w": [0.3, 1, -0.6] } },
+        "blue": { "pelvis": [42, 36, 0], "rot": [50, -90, 0], "spine": [30, 0, 0], "head": [20, 0, 0],
+                  "lh": [-25, 6, 32], "lhp": { "w": [0.3, 0.4, 1] },
+                  "rh": [-48, 28, 12], "rhp": { "w": [0, 1, -1] },
+                  "lf": [85, 6, 13], "rf": [85, 6, -13], "lfp": { "w": [-1, -0.6, 0] }, "rfp": { "w": [-1, -0.6, 0] }, "fd": [1, -0.2, 0] }
+      },
+      "tight": {
+        "red":  { "pelvis": [0, 22, 0], "head": [30, 0, 0], "rf": { "j": "blue.neck", "o": [-10, 4, -8] } },
+        "blue": { "pelvis": [40, 33, 0], "head": [30, 0, 0] }
+      }
+    }
+  }
+}
