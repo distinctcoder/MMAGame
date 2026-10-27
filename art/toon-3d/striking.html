@@ -1,0 +1,700 @@
+<title>Striking Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<style>
+  /* Layout: one centered column; the 3D cage with fight HUD is the hero, the strike and block pads sit under it, then setup and the strike chart. */
+  :root {
+    --bg: #eef0f3; --surface: #ffffff; --ink: #16181d; --muted: #5b6170; --line: #d5d9e1;
+    --blue: #1f5fbf; --red: #c8232c; --gold: #b8860b; --good: #2f9e5b; --on-accent: #ffffff;
+    --wall: #d9dee6; --fence: #6b7385; --post: #2c313b; --mat: #e4e7ec; --mat-line: #c8232c;
+    --hud-bg: rgba(255, 255, 255, 0.88); --track: #dfe3ea;
+    --display: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
+    --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #101318; --surface: #181c23; --ink: #e9ecf2; --muted: #9aa3b2; --line: #2a303b;
+      --blue: #5b93ea; --red: #e5484f; --gold: #e0b341; --good: #3fbf74; --on-accent: #0c0f14;
+      --wall: #1b2029; --fence: #8a93a6; --post: #0b0d11; --mat: #2b313c; --mat-line: #e5484f;
+      --hud-bg: rgba(16, 19, 24, 0.84); --track: #2a303b;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #101318; --surface: #181c23; --ink: #e9ecf2; --muted: #9aa3b2; --line: #2a303b;
+    --blue: #5b93ea; --red: #e5484f; --gold: #e0b341; --good: #3fbf74; --on-accent: #0c0f14;
+    --wall: #1b2029; --fence: #8a93a6; --post: #0b0d11; --mat: #2b313c; --mat-line: #e5484f;
+    --hud-bg: rgba(16, 19, 24, 0.84); --track: #2a303b;
+    color-scheme: dark;
+  }
+  [hidden] { display: none !important; }
+  body { background: var(--bg); color: var(--ink); font: 400 15px/1.55 var(--body); }
+  .wrap {
+    max-width: 1040px; margin: 0 auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 32px 64px;
+    display: grid; gap: 32px;
+  }
+  header { display: grid; gap: 10px; }
+  .eyebrow { font: 500 12px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  h1, h2 { font-family: var(--display); font-weight: 800; text-transform: uppercase; letter-spacing: 0.01em; line-height: 0.95; margin: 0; text-wrap: balance; }
+  h1 { font-size: clamp(40px, 7vw, 68px); }
+  h1 .corner { color: var(--red); }
+  h2 { font-size: 28px; }
+  p { margin: 0; max-width: 65ch; }
+  .lede { font-size: 17px; color: var(--muted); }
+
+  .stage { display: grid; gap: 14px; }
+  .canvas-box { position: relative; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--wall); }
+  canvas { display: block; width: 100%; aspect-ratio: 16 / 9; max-width: 100%; }
+  .status { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; background: var(--surface); color: var(--muted); }
+
+  .hud { position: absolute; top: 10px; left: 10px; right: 10px; display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: start; pointer-events: none; }
+  .side { display: grid; gap: 4px; min-width: 0; }
+  .side.blue { text-align: right; }
+  .who { font: 700 15px/1 var(--display); letter-spacing: 0.04em; text-transform: uppercase; }
+  .side.red .who { color: var(--red); }
+  .side.blue .who { color: var(--blue); }
+  .who small { font: 500 11px/1 var(--mono); color: var(--muted); letter-spacing: 0.06em; margin: 0 6px; }
+  .meter { height: 10px; border-radius: 2px; background: var(--hud-bg); border: 1px solid var(--line); overflow: hidden; display: flex; }
+  .side.blue .meter { justify-content: flex-end; }
+  .meter i { display: block; height: 100%; transition: width 0.2s ease-out; }
+  .side.red .meter.hp i { background: var(--red); }
+  .side.blue .meter.hp i { background: var(--blue); }
+  .meter.sta { height: 5px; }
+  .meter.sta i { background: var(--gold); }
+  .dmg { display: flex; gap: 10px; font: 500 10px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  .side.blue .dmg { justify-content: flex-end; }
+  .dmg b { color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .clock { font: 800 26px/1 var(--display); font-variant-numeric: tabular-nums; padding: 5px 10px; border-radius: 3px; background: var(--hud-bg); border: 1px solid var(--line); }
+
+  .banner { position: absolute; left: 0; right: 0; top: 34%; text-align: center; pointer-events: none;
+    font: 800 clamp(30px, 7vw, 64px)/1 var(--display); text-transform: uppercase; color: var(--ink);
+    text-shadow: 0 2px 0 var(--bg), 0 0 18px var(--bg); opacity: 0; transition: opacity 0.2s; }
+  .banner.show { opacity: 1; }
+  .banner small { display: block; margin-top: 8px; font: 600 14px/1.3 var(--body); text-transform: none; color: var(--muted); }
+  .tell { position: absolute; transform: translate(0, -50%); pointer-events: none; padding: 5px 8px; border-radius: 4px;
+    background: var(--ink); color: var(--bg); font: 600 13px/1.2 var(--body); white-space: nowrap; }
+  .tell b { font-family: var(--mono); }
+  .pop { position: absolute; transform: translate(-50%, -50%); pointer-events: none; font: 800 22px/1 var(--display); text-transform: uppercase;
+    letter-spacing: 0.02em; text-shadow: 0 1px 0 var(--bg), 0 0 8px var(--bg); animation: pop 0.9s ease-out forwards; white-space: nowrap; }
+  .pop.hit { color: var(--red); }
+  .pop.block { color: var(--good); }
+  .pop.miss { color: var(--muted); }
+  .pop.gold { color: var(--gold); }
+  @keyframes pop { 0% { opacity: 0; margin-top: 6px; } 15% { opacity: 1; } 100% { opacity: 0; margin-top: -40px; } }
+  @media (prefers-reduced-motion: reduce) { .pop { animation-duration: 1.2s; } }
+
+  .pads { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 16px 28px; align-items: start; }
+  .group { display: grid; gap: 6px; min-width: 0; align-content: start; }
+  .label { font: 500 11px/1 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  button, select {
+    font: 600 14px/1 var(--body); color: var(--ink); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; cursor: pointer; touch-action: manipulation;
+  }
+  button:hover, select:hover { border-color: var(--muted); }
+  button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  button.active { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+  kbd { font: 500 11px/1 var(--mono); padding: 3px 5px; border-radius: 3px; border: 1px solid currentColor; opacity: 0.7; }
+  .strike { display: inline-flex; gap: 8px; align-items: center; }
+  .blockpad { display: grid; grid-template-columns: repeat(3, 76px); grid-template-rows: repeat(3, 40px); gap: 4px; }
+  .blockpad button { padding: 4px; font-size: 12px; display: grid; place-items: center; line-height: 1.15; }
+  .blockpad .b-high { grid-area: 1 / 2; } .blockpad .b-left { grid-area: 2 / 1; } .blockpad .b-body { grid-area: 2 / 2; }
+  .blockpad .b-right { grid-area: 2 / 3; } .blockpad .b-low { grid-area: 3 / 2; }
+  .hint { color: var(--muted); font-size: 14px; }
+  .setup { display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: flex-end; }
+  .field { display: grid; gap: 6px; }
+  .check { display: inline-flex; gap: 8px; align-items: center; font-weight: 600; cursor: pointer; padding: 9px 0; }
+  .check input { width: 16px; height: 16px; accent-color: var(--blue); }
+
+  section { display: grid; gap: 14px; }
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; min-width: 620px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 14px 8px 0; border-top: 1px solid var(--line); vertical-align: top; }
+  th { font: 500 11px/1.2 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); border-top: 0; }
+  td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  td .zone { font-weight: 600; }
+  ul.points { margin: 0; padding-left: 20px; display: grid; gap: 6px; max-width: 72ch; }
+  @media (max-width: 720px) { .pads { grid-template-columns: 1fr; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">2D MMA &middot; Striking prototype</div>
+    <h1>Striking <span class="corner">lab</span></h1>
+    <p class="lede">Every strike has a matching block. Straights need a high guard, hooks need you to cover the side they come from, body kicks need elbows down and low kicks need a check. Read the windup, raise the right block, and block late for a counter.</p>
+  </header>
+
+  <div class="stage">
+    <div class="canvas-box" id="box">
+      <canvas id="stage" aria-label="Two cel-shaded 3D fighters striking in an octagon cage"></canvas>
+      <div class="hud" id="hud" hidden>
+        <div class="side red">
+          <span class="who">Red<small id="red-style"></small></span>
+          <div class="meter hp"><i id="red-hp"></i></div>
+          <div class="meter sta"><i id="red-sta"></i></div>
+          <div class="dmg"><span>Body <b id="red-body">0</b></span><span>Legs <b id="red-legs">0</b></span></div>
+        </div>
+        <div class="clock" id="clock">2:00</div>
+        <div class="side blue">
+          <span class="who"><small id="blue-style"></small>Blue</span>
+          <div class="meter hp"><i id="blue-hp"></i></div>
+          <div class="meter sta"><i id="blue-sta"></i></div>
+          <div class="dmg"><span>Body <b id="blue-body">0</b></span><span>Legs <b id="blue-legs">0</b></span></div>
+        </div>
+      </div>
+      <div class="tell" id="tell" hidden></div>
+      <div class="banner" id="banner"></div>
+      <div class="status" id="status">Loading the 3D scene&hellip;</div>
+    </div>
+
+    <div class="pads">
+      <div class="group">
+        <span class="label">Strike</span>
+        <div class="row" id="strikes"></div>
+        <span class="label" style="margin-top:8px">Move</span>
+        <div class="row">
+          <button type="button" class="strike" data-move="-1"><kbd>&larr;</kbd> Step back</button>
+          <button type="button" class="strike" data-move="1">Step in <kbd>&rarr;</kbd></button>
+        </div>
+      </div>
+      <div class="group">
+        <span class="label">Block</span>
+        <div class="blockpad" id="blockpad"></div>
+      </div>
+      <div class="group">
+        <span class="label">How to block</span>
+        <p class="hint" style="max-width:24ch">Hold a direction (W, A, S, D) and press Space. Space alone guards the body. Or tap the pad.</p>
+      </div>
+    </div>
+
+    <div class="setup">
+      <div class="field"><label class="label" for="style-red">Your style (Red)</label><select id="style-red"></select></div>
+      <div class="field"><label class="label" for="style-blue">CPU style (Blue)</label><select id="style-blue"></select></div>
+      <div class="field"><label class="label" for="level">CPU level</label>
+        <select id="level"><option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option></select></div>
+      <label class="check" for="tells"><input type="checkbox" id="tells" checked> Show tells</label>
+      <button type="button" id="restart">Restart fight</button>
+    </div>
+  </div>
+
+  <section>
+    <h2>Strike chart</h2>
+    <p>Windup is how long you have to read it. Range is the distance between the fighters' hips where it lands; outside it the strike whiffs and you recover slowly.</p>
+    <div class="table-wrap"><table id="chart"></table></div>
+  </section>
+
+  <section>
+    <h2>Strategy</h2>
+    <ul class="points">
+      <li><b>Right block, wrong block.</b> The matching block stops a punch completely and takes most of the sting out of a kick. A high guard still catches half of a hook. Covering the wrong side leaves you open for full damage.</li>
+      <li><b>Block late for a counter.</b> Raise the block in the last moment before impact to parry. Your next strike comes out faster and hits harder.</li>
+      <li><b>Checked kicks hurt the kicker.</b> A checked low kick damages the kicker's leg instead.</li>
+      <li><b>Speed beats power.</b> Landing any strike interrupts the other fighter's windup, so a jab can stop a head kick.</li>
+      <li><b>Range.</b> Hooks only land close. Kicks need distance. Step in and out to stay where your strikes land and theirs don't.</li>
+      <li><b>Stamina.</b> Every strike costs stamina. When it runs low, strikes get slower and weaker. Body damage lowers your stamina ceiling.</li>
+      <li><b>Three ways to lose.</b> Head damage ends in a knockout. Leg damage or body damage ends in a TKO. If the clock runs out, the judges score total damage.</li>
+    </ul>
+  </section>
+</div>
+
+<script type="module">
+import { V, clamp, ease, qEuler, rot, add, LIMBS, bodyJoints, solveLimbs, blendState, PALETTES, createStage } from './toon-rig.js';
+
+const $ = id => document.getElementById(id);
+const rand = (a, b) => a + Math.random() * (b - a);
+const ROUND = 120000;
+const LEVELS = { easy: { def: -22, aggr: 0.6, react: 1.35 }, normal: { def: 0, aggr: 1, react: 1 }, hard: { def: 14, aggr: 1.35, react: 0.8 } };
+
+// Damage multiplier for [strike zone][block zone]. Missing entries mean the block did nothing.
+const BLOCK_TABLE = {
+  high:  { high: 0 },
+  left:  { left: 0, high: 0.5 },
+  right: { right: 0, high: 0.5 },
+  body:  { body: 0 },
+  low:   { low: 0 }
+};
+const KICK_THROUGH = 0.2;
+
+// ---------- Scene ----------
+let stage;
+try { stage = createStage($('stage')); }
+catch (err) { $('status').textContent = 'This browser could not start WebGL, which the 3D view needs.'; throw err; }
+const { renderer, scene, camera, panels, readColors, makeFighter } = stage;
+
+let data;
+const G = { now: 0, last: performance.now(), scale: 1, slowUntil: 0, over: false, clock: ROUND, shake: 0, tells: true, level: 'normal' };
+const F = {
+  red:  { color: 'red', yaw: 90, dir: 1, style: 'muay_thai', mesh: makeFighter(PALETTES.red) },
+  blue: { color: 'blue', yaw: -90, dir: -1, style: 'boxing', mesh: makeFighter(PALETTES.blue) }
+};
+const other = f => f === F.red ? F.blue : F.red;
+const label = f => f === F.red ? 'Red' : 'Blue';
+const st = f => data.styles[f.style];
+
+// ---------- Pose resolving ----------
+function specFor(name) {
+  const base = data.poses.stance, p = data.poses[name] || {};
+  return Object.assign({}, base, p);
+}
+function resolve(f, name, t) {
+  const s = specFor(name), o = other(f);
+  const out = {};
+  const Qy = qEuler([0, f.yaw, 0]);
+  out.Qy = Qy;
+  out.Qp = Qy.clone().multiply(qEuler(s.rot));
+  if (f.headHP < 30 && !G.over) out.Qp.multiply(qEuler([0, 0, Math.sin(t / 260) * 5]));
+  out.Qc = out.Qp.clone().multiply(qEuler(s.spine));
+  out.Qh = out.Qc.clone().multiply(qEuler(s.head));
+  const base = V(f.x, 0, 0);
+  out.P = add(base, Qy, s.pelvis.b);
+  const j = bodyJoints(out);
+  const oj = o.bodyJoints, oQy = qEuler([0, o.yaw, 0]);
+  const point = spec => {
+    if (spec.h) return add(base, Qy, spec.h);
+    if (spec.hc) return add(j.chest, Qy, spec.hc);
+    const name = spec.j.split('.')[1];
+    return add(oj[name] || oj.pelvis, oQy, spec.o || [0, 0, 0]);
+  };
+  out.t = {}; out.p = {};
+  for (const L of LIMBS) {
+    out.t[L.k] = point(s[L.k]);
+    const pol = s[L.k + 'p'];
+    out.p[L.k] = pol ? rot(L.arm ? out.Qc : out.Qp, pol).normalize()
+      : L.arm ? rot(out.Qc, [0.6 * L.side, -1, -0.3]).normalize() : rot(out.Qp, [0, 0, 1]);
+  }
+  out.fd = rot(Qy, [0, 0, 1]);
+  return out;
+}
+function setAnim(f, name, dur) {
+  f.anim = { from: f.shown || null, name, t0: G.now, dur };
+}
+function animState(f) {
+  const a = f.anim;
+  let target = resolve(f, a.name, G.now);
+  if (a.name === 'stance' && !G.over) target = blendState(target, resolve(f, 'stance_b', G.now), 0.5 - 0.5 * Math.cos(G.now / 900 * Math.PI * 2));
+  if (!a.from || !a.dur) return target;
+  const u = clamp((G.now - a.t0) / a.dur, 0, 1);
+  return u >= 1 ? target : blendState(a.from, target, ease(u));
+}
+
+// ---------- Fight state ----------
+function maxSta(f) { return 100 - f.body * 0.4; }
+function resetFighter(f, x) {
+  const s = st(f);
+  Object.assign(f, { x, fromX: x, toX: x, moveT0: 0, moveDur: 0, headMax: 80 + s.chin * 0.7, body: 0, legs: 0, sta: 100,
+    action: { type: 'idle' }, queued: null, counterUntil: 0, dealt: 0, shown: null, anim: null, nextThink: 0, plannedBlock: null });
+  f.headHP = f.headMax;
+  setAnim(f, 'stance', 0);
+}
+function restart() {
+  readStyles();
+  G.over = false; G.clock = ROUND; G.scale = 1; G.slowUntil = 0; G.koCam = null;
+  resetFighter(F.red, -55); resetFighter(F.blue, 55);
+  primeBodies();
+  $('banner').classList.remove('show');
+  hideTell();
+  updateHud();
+}
+// Each fighter aims at the other's last solved body. Seed both before the first frame.
+function primeBodies() {
+  for (const f of [F.red, F.blue]) {
+    const Qy = qEuler([0, f.yaw, 0]);
+    const P = add(V(f.x, 0, 0), Qy, data.poses.stance.pelvis.b);
+    f.bodyJoints = bodyJoints({ P, Qp: Qy, Qc: Qy, Qh: Qy });
+  }
+}
+
+function readStyles() {
+  F.red.style = $('style-red').value;
+  F.blue.style = $('style-blue').value;
+  G.level = $('level').value;
+  $('red-style').textContent = st(F.red).label;
+  $('blue-style').textContent = st(F.blue).label;
+}
+
+const speedMul = f => (1.25 - st(f).speed / 200) * (f.headHP < 30 ? 1.15 : 1);
+
+function startStrike(f, key, chained) {
+  const s = data.strikes[key];
+  if (!s) return;
+  const counter = G.now < f.counterUntil;
+  const gassed = f.sta < s.cost;
+  let windup = s.windup * speedMul(f) * (s.kick ? 1.15 - st(f).kicks / 400 : 1);
+  if (chained) windup *= 0.8;
+  if (counter) windup *= 0.6;
+  if (gassed) windup *= 1.4;
+  f.sta = Math.max(0, f.sta - s.cost);
+  f.counterUntil = 0;
+  const tHit = G.now + windup;
+  f.action = { type: 'strike', key, s, phase: 'wind', t0: G.now, tHit, counter, gassed };
+  setAnim(f, s.wind, Math.max(80, windup - 70));
+  onWindup(other(f), f, s, windup);
+  if (f === F.blue) showTell(s);
+}
+function startBlock(f, zone) {
+  if (G.over || !['idle', 'block'].includes(f.action.type)) return false;
+  const win = 380 + (st(f).defense + (f === F.blue ? LEVELS[G.level].def : 0)) * 1.5;
+  f.action = { type: 'block', zone, t0: G.now, tEnd: G.now + win };
+  f.sta = Math.max(0, f.sta - 1);
+  setAnim(f, 'block_' + zone, 80);
+  return true;
+}
+function startStep(f, dirn) {
+  if (G.over || f.action.type !== 'idle') return;
+  const o = other(f), dist = Math.abs(f.x - o.x);
+  let to = f.x + dirn * f.dir * 26;
+  if (dirn > 0 && dist - 26 < 48) to = o.x - f.dir * 48;
+  to = clamp(to, -250, 250);
+  const dur = 200 * (1 + f.legs / 200);
+  f.action = { type: 'step', tEnd: G.now + dur };
+  f.fromX = f.x; f.toX = to; f.moveT0 = G.now; f.moveDur = dur;
+  f.sta = Math.max(0, f.sta - 1);
+}
+function stun(f, zone, dmg) {
+  const name = { high: 'hit_high', left: 'hit_left', right: 'hit_right', body: 'hit_body', low: 'hit_low' }[zone];
+  f.action = { type: 'stun', tEnd: G.now + 160 + dmg * 9 };
+  f.queued = null;
+  f.plannedBlock = null;
+  if (f === F.blue) hideTell();
+  setAnim(f, name, 80);
+}
+
+function impact(att) {
+  const a = att.action, s = a.s, def = other(att);
+  const dist = Math.abs(att.x - def.x);
+  const at = def.bodyJoints[s.part === 'legs' ? 'lhip' : s.part === 'body' ? 'chest' : 'head'];
+  if (dist < s.range[0] - 6 || dist > s.range[1]) {
+    pop(at, 'Whiff', 'miss');
+    a.recoverMul = 1.6;
+    return;
+  }
+  let mult = 1, tag = null;
+  if (def.action.type === 'block') {
+    const m = BLOCK_TABLE[s.zone][def.action.zone];
+    if (m !== undefined) {
+      mult = m === 0 && s.kick && s.zone !== 'low' ? KICK_THROUGH : m;
+      const perfect = m === 0 && G.now - def.action.t0 <= 170;
+      if (m === 0) {
+        if (s.zone === 'low') { att.legs = Math.min(100, att.legs + 6); tag = ['Checked', 'block']; }
+        else tag = [perfect ? 'Parry! Counter' : 'Blocked', perfect ? 'gold' : 'block'];
+        if (perfect) def.counterUntil = G.now + 900;
+      } else tag = ['Partly blocked', 'block'];
+    }
+  }
+  const sf = st(att);
+  let dmg = s.dmg * (0.6 + sf.power / 100 * 0.6) * (s.kick ? 0.5 + sf.kicks / 100 * 0.7 : 1) * rand(0.9, 1.1) * mult;
+  if (a.counter) dmg *= 1.5;
+  if (a.gassed) dmg *= 0.6;
+  dmg = Math.round(dmg * 10) / 10;
+  if (dmg >= 1) {
+    if (s.part === 'head') def.headHP = Math.max(0, def.headHP - dmg);
+    else if (s.part === 'body') { def.body = Math.min(100, def.body + dmg * 1.6); def.sta = Math.max(0, def.sta - dmg); }
+    else def.legs = Math.min(100, def.legs + dmg * 1.5);
+    att.dealt += dmg;
+    if (mult >= 0.5) {
+      if (['strike', 'idle', 'step', 'block'].includes(def.action.type)) stun(def, s.zone, dmg);
+      G.shake = Math.min(10, dmg * 0.5);
+      if (!tag) tag = [(a.counter ? 'Counter ' : '') + Math.round(dmg), a.counter ? 'gold' : 'hit'];
+    }
+  }
+  if (tag) pop(at, tag[0], tag[1]);
+  checkFinish(att, def, s);
+}
+
+function checkFinish(att, def, s) {
+  let how = null;
+  if (def.headHP <= 0) how = ['KO', s.label];
+  else if (def.legs >= 100) how = ['TKO', 'leg kicks'];
+  else if (def.body >= 100) how = ['TKO', 'body shots'];
+  if (how) finish(att, def, how[0], how[1]);
+}
+function finish(winner, loser, how, detail) {
+  G.over = true;
+  hideTell();
+  loser.action = { type: 'down' };
+  setAnim(loser, 'ko', 1100);
+  winner.action = { type: 'done' };
+  setAnim(winner, 'stance', 300);
+  setTimeout(() => setAnim(winner, 'win', 700), 1300);
+  G.scale = 0.35; G.slowUntil = performance.now() + 1500;
+  G.koCam = loser;
+  banner(how, label(winner) + ' wins by ' + (how === 'Decision' ? 'decision' : detail.toLowerCase()), 0);
+}
+function decision() {
+  const r = F.red.dealt, b = F.blue.dealt;
+  if (Math.abs(r - b) < 1) { G.over = true; hideTell(); banner('Draw', 'Even on the judges’ cards', 0); return; }
+  const w = r > b ? F.red : F.blue;
+  G.over = true; hideTell();
+  w.action = { type: 'done' }; setAnim(w, 'win', 700);
+  banner('Decision', label(w) + ' wins on damage, ' + Math.round(Math.max(r, b)) + ' to ' + Math.round(Math.min(r, b)), 0);
+}
+
+// ---------- Per-frame fighter update ----------
+function updateFighter(f, dt) {
+  const a = f.action;
+  if (f.moveDur) {
+    const u = clamp((G.now - f.moveT0) / f.moveDur, 0, 1);
+    f.x = f.fromX + (f.toX - f.fromX) * ease(u);
+    if (u >= 1) f.moveDur = 0;
+  }
+  if (!G.over) f.sta = Math.min(maxSta(f), f.sta + dt / 1000 * 8 * (st(f).cardio / 70) * (1 - f.body / 200) * (a.type === 'idle' ? 1 : 0.4));
+  if (a.type === 'strike') {
+    if (a.phase === 'wind' && G.now >= a.tHit - 70) { a.phase = 'extend'; setAnim(f, a.s.hit, 70); }
+    if (a.phase === 'extend' && G.now >= a.tHit) {
+      a.phase = 'hold'; a.recoverMul = 1;
+      if (f === F.blue) hideTell();
+      impact(f);
+      a.tRecover = G.now + 60;
+    }
+    if (a.phase === 'hold' && G.now >= a.tRecover && !G.over) {
+      a.phase = 'recover';
+      const dur = a.s.recover * a.recoverMul * speedMul(f);
+      a.tEnd = G.now + dur;
+      setAnim(f, 'stance', dur);
+    }
+    if (a.phase === 'recover' && G.now >= a.tEnd) toIdle(f);
+  } else if (a.type === 'block' || a.type === 'stun' || a.type === 'step') {
+    if (G.now >= a.tEnd) { if (a.type !== 'step') setAnim(f, 'stance', 220); toIdle(f); }
+  }
+}
+function toIdle(f) {
+  f.action = { type: 'idle', since: G.now };
+  if (f.queued && !G.over) {
+    const q = f.queued; f.queued = null;
+    if (q.kind === 'strike') startStrike(f, q.key, G.now - q.at < 600);
+    else if (q.kind === 'block') startBlock(f, q.zone);
+  }
+}
+
+// ---------- CPU ----------
+function weightedPick(mix, ok) {
+  const items = Object.entries(mix).filter(([k]) => ok(k));
+  const total = items.reduce((n, [, w]) => n + w, 0);
+  let r = Math.random() * total;
+  for (const [k, w] of items) { if ((r -= w) <= 0) return k; }
+  return items.length ? items[items.length - 1][0] : null;
+}
+function cpuThink(f) {
+  if (G.over || f.action.type !== 'idle' || G.now < f.nextThink) return;
+  const s = st(f), lv = LEVELS[G.level], o = other(f), dist = Math.abs(f.x - o.x);
+  f.nextThink = G.now + rand(220, 520) / lv.aggr;
+  if (dist > s.range + 18 && Math.random() < 0.7) return startStep(f, 1);
+  if (dist < s.range - 22 && Math.random() < 0.45) return startStep(f, -1);
+  if (Math.random() > 0.65 * s.aggression * lv.aggr) return;
+  const key = weightedPick(s.mix, k => { const r = data.strikes[k].range; return dist >= r[0] - 4 && dist <= r[1] + 6 && f.sta >= data.strikes[k].cost * 0.7; });
+  if (key) startStrike(f, key, false);
+  else if (dist > s.range) startStep(f, 1);
+}
+// The CPU sees your windup and, after a reaction delay, raises a block it hopes is the right one.
+function onWindup(def, att, s, windup) {
+  if (def !== F.blue || G.over) return;
+  const lv = LEVELS[G.level], d = st(def).defense + lv.def;
+  const delay = rand(160, 380) * (1.25 - d / 200) * lv.react;
+  if (delay > windup - 40) return;
+  const correct = Math.random() < clamp(0.3 + d / 130 + (windup - 250) / 700, 0.08, 0.93);
+  const zones = Object.keys(data.zones).filter(z => z !== s.zone);
+  const zone = correct ? s.zone : zones[Math.floor(Math.random() * zones.length)];
+  def.plannedBlock = { at: att.action.tHit - Math.min(windup - delay, rand(90, 260)), zone };
+}
+function cpuDefend(f) {
+  const p = f.plannedBlock;
+  if (!p || G.now < p.at) return;
+  f.plannedBlock = null;
+  if (f.action.type === 'idle' || f.action.type === 'block') startBlock(f, p.zone);
+}
+
+// ---------- Input ----------
+const held = new Set();
+const DIR_ZONE = { w: 'high', arrowup: 'high', a: 'left', d: 'right', s: 'low', arrowdown: 'low' };
+function humanStrike(key) {
+  const f = F.red;
+  if (G.over) return;
+  if (f.action.type === 'idle') startStrike(f, key, G.now - (f.action.since || 0) < 250);
+  else if (f.action.type === 'strike' && f.action.phase !== 'wind') f.queued = { kind: 'strike', key, at: G.now };
+}
+function humanBlock(zone) {
+  const f = F.red;
+  if (G.over) return;
+  if (!startBlock(f, zone) && f.action.type === 'strike' && f.action.phase === 'recover') f.queued = { kind: 'block', zone, at: G.now };
+}
+function heldZone() {
+  for (const k of ['w', 'arrowup', 'a', 'd', 's', 'arrowdown']) if (held.has(k)) return DIR_ZONE[k];
+  return 'body';
+}
+addEventListener('keydown', e => {
+  if (e.target.closest('select') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k === ' ' || k.startsWith('arrow')) e.preventDefault();
+  if (e.repeat) return;
+  held.add(k);
+  if (k === ' ') return humanBlock(heldZone());
+  if (k === 'arrowleft') return startStep(F.red, -1);
+  if (k === 'arrowright') return startStep(F.red, 1);
+  for (const [key, s] of Object.entries(data.strikes)) if (s.key === k) return humanStrike(key);
+});
+addEventListener('keyup', e => held.delete(e.key.toLowerCase()));
+addEventListener('blur', () => held.clear());
+
+// ---------- HUD, tells, pops ----------
+function project(p) {
+  const v = p.clone().project(camera), box = $('box');
+  return { x: (v.x + 1) / 2 * box.clientWidth, y: (1 - v.y) / 2 * box.clientHeight };
+}
+function pop(at, text, kind) {
+  const el = document.createElement('div');
+  el.className = 'pop ' + kind;
+  el.textContent = text;
+  const s = project(at.clone().add(V(0, 8, 0)));
+  el.style.left = s.x + 'px'; el.style.top = s.y + 'px';
+  $('box').appendChild(el);
+  setTimeout(() => el.remove(), 950);
+}
+function showTell(s) {
+  if (!G.tells) return;
+  const z = data.zones[s.zone];
+  $('tell').innerHTML = s.label + ' &middot; block <b>' + z.arrow + ' ' + z.label + '</b>';
+  $('tell').hidden = false;
+}
+function hideTell() { $('tell').hidden = true; }
+let bannerTimer;
+function banner(text, sub, ms = 1200) {
+  const el = $('banner');
+  el.innerHTML = text + (sub ? '<small>' + sub + '</small>' : '');
+  el.classList.add('show');
+  clearTimeout(bannerTimer);
+  if (ms) bannerTimer = setTimeout(() => el.classList.remove('show'), ms);
+}
+function updateHud() {
+  for (const f of [F.red, F.blue]) {
+    $(f.color + '-hp').style.width = (f.headHP / f.headMax * 100) + '%';
+    $(f.color + '-sta').style.width = f.sta + '%';
+    $(f.color + '-body').textContent = Math.round(f.body);
+    $(f.color + '-legs').textContent = Math.round(f.legs);
+  }
+  const c = Math.max(0, Math.ceil(G.clock / 1000));
+  $('clock').textContent = Math.floor(c / 60) + ':' + String(c % 60).padStart(2, '0');
+  document.querySelectorAll('#blockpad button').forEach(b => b.classList.toggle('active', F.red.action.type === 'block' && F.red.action.zone === b.dataset.zone));
+}
+
+function buildControls() {
+  const strikes = $('strikes');
+  for (const [key, s] of Object.entries(data.strikes)) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'strike';
+    b.innerHTML = s.label + ' <kbd>' + s.key.toUpperCase() + '</kbd>';
+    b.addEventListener('pointerdown', e => { e.preventDefault(); humanStrike(key); });
+    b.addEventListener('keydown', e => { if (e.key === 'Enter') humanStrike(key); });
+    strikes.appendChild(b);
+  }
+  const pad = $('blockpad');
+  for (const [zone, z] of Object.entries(data.zones)) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'b-' + zone; b.dataset.zone = zone;
+    b.innerHTML = z.arrow + ' ' + z.label;
+    b.title = 'Blocks ' + z.covers;
+    b.addEventListener('pointerdown', e => { e.preventDefault(); humanBlock(zone); });
+    b.addEventListener('keydown', e => { if (e.key === 'Enter') humanBlock(zone); });
+    pad.appendChild(b);
+  }
+  document.querySelectorAll('[data-move]').forEach(b => b.addEventListener('pointerdown', e => { e.preventDefault(); startStep(F.red, +b.dataset.move); }));
+  for (const c of ['red', 'blue']) {
+    const sel = $('style-' + c);
+    for (const [id, s] of Object.entries(data.styles)) sel.add(new Option(s.label, id, false, id === F[c].style));
+    sel.addEventListener('change', restart);
+  }
+  $('level').addEventListener('change', restart);
+  $('tells').addEventListener('change', e => { G.tells = e.target.checked; if (!G.tells) hideTell(); });
+  $('restart').addEventListener('click', restart);
+
+  let html = '<thead><tr><th>Strike</th><th>Key</th><th>Block with</th><th>Windup</th><th>Damage</th><th>Hits</th><th>Range</th><th>Stamina</th></tr></thead><tbody>';
+  for (const s of Object.values(data.strikes)) {
+    const z = data.zones[s.zone];
+    html += '<tr><td>' + s.label + '</td><td><kbd>' + s.key.toUpperCase() + '</kbd></td><td><span class="zone">' + z.arrow + ' ' + z.label + '</span></td>' +
+      '<td class="num">' + s.windup + ' ms</td><td class="num">' + s.dmg + '</td><td>' + s.part + '</td><td class="num">' + s.range[0] + '–' + s.range[1] + '</td><td class="num">' + s.cost + '</td></tr>';
+  }
+  $('chart').innerHTML = html + '</tbody>';
+}
+
+// ---------- Camera and loop ----------
+const camPos = V(70, 128, 820), camLook = V(0, 102, 0);
+function resize() {
+  const w = $('stage').clientWidth || 800, h = Math.round(w * 9 / 16);
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+}
+addEventListener('resize', resize);
+
+function frame(real) {
+  const rdt = Math.min(50, real - G.last);
+  G.last = real;
+  if (G.slowUntil && real > G.slowUntil) { G.scale = 1; G.slowUntil = 0; }
+  const dt = rdt * G.scale;
+  G.now += dt;
+  if (!G.over) { G.clock -= dt; if (G.clock <= 0) { G.clock = 0; decision(); } }
+
+  cpuThink(F.blue);
+  cpuDefend(F.blue);
+  for (const f of [F.red, F.blue]) updateFighter(f, dt);
+  for (const f of [F.red, F.blue]) {
+    f.shown = animState(f);
+    f.mesh.update(f.shown);
+  }
+  for (const f of [F.red, F.blue]) f.bodyJoints = bodyJoints(f.shown);
+
+  const mid = (F.red.x + F.blue.x) / 2;
+  let tPos = V(mid + 70, 128, 820), tLook = V(mid, 102, 0), fov = 17.5;
+  if (G.koCam) { const k = G.koCam; tPos = V(k.x - k.dir * 170, 150, 300); tLook = V(k.x - k.dir * 30, 45, 0); fov = 26; }
+  const k = 1 - Math.pow(0.0025, rdt / 1000);
+  camPos.lerp(tPos, k); camLook.lerp(tLook, k);
+  camera.fov += (fov - camera.fov) * k;
+  camera.position.copy(camPos);
+  if (G.shake > 0.2) { camera.position.add(V(rand(-1, 1), rand(-1, 1), 0).multiplyScalar(G.shake)); G.shake *= 0.86; }
+  camera.lookAt(camLook);
+  camera.updateProjectionMatrix();
+  const view = V(camPos.x - camLook.x, 0, camPos.z - camLook.z).normalize();
+  for (const p of panels) p.g.visible = p.normal.dot(view) < 0.35;
+
+  if (!$('tell').hidden) {
+    const s = project(F.blue.bodyJoints.head), tell = $('tell'), room = $('box').clientWidth - tell.offsetWidth - 6;
+    tell.style.left = clamp(s.x + 34, 6, room) + 'px'; tell.style.top = Math.max(s.y, 70) + 'px';
+  }
+  updateHud();
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+
+// Debug hook for tests: fight state at a glance.
+window.__fight = () => Object.fromEntries([F.red, F.blue].map(f => [f.color, { head: Math.round(f.headHP), body: Math.round(f.body), legs: Math.round(f.legs), sta: Math.round(f.sta), dealt: Math.round(f.dealt), action: f.action.type }]).concat([['over', G.over], ['banner', $('banner').textContent]]));
+
+// Debug hook for checking poses: __pose('jab_hit', 'cross_hit', 90)
+window.__pose = (redPose, bluePose, dist) => {
+  G.over = true;
+  F.red.x = -dist / 2; F.blue.x = dist / 2;
+  for (const f of [F.red, F.blue]) { f.moveDur = 0; f.action = { type: 'done' }; }
+  primeBodies();
+  for (let i = 0; i < 2; i++) for (const [f, p] of [[F.red, redPose], [F.blue, bluePose]]) { f.anim = { from: null, name: p, t0: G.now, dur: 0 }; f.shown = animState(f); f.bodyJoints = bodyJoints(f.shown); }
+};
+
+try {
+  const res = await fetch('strikes.json');
+  if (!res.ok) throw new Error('strikes.json returned ' + res.status);
+  data = await res.json();
+} catch (err) {
+  $('status').textContent = 'The strike data did not load (' + err.message + '). Open this page through a local web server, not straight from disk.';
+  throw err;
+}
+$('status').hidden = true;
+$('hud').hidden = false;
+readColors();
+buildControls();
+restart();
+resize();
+camera.fov = 17.5;
+requestAnimationFrame(frame);
+</script>
