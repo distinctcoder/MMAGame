@@ -1,0 +1,450 @@
+<title>Fighter Sprite Rig</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<style>
+  /* Layout: one centered column; the canvas stage is the hero, controls sit under it, the parts sheet follows as a grid. */
+  :root {
+    --bg: #eef0f3; --surface: #ffffff; --ink: #16181d; --muted: #5b6170; --line: #d5d9e1;
+    --blue: #1f5fbf; --red: #c8232c; --on-accent: #ffffff;
+    --wall: #dfe3ea; --wall-2: #c9cfd9; --fence: rgba(40, 48, 64, 0.20); --post: #2c313b;
+    --mat: #cfd5de; --mat-line: #aeb6c3; --bag: #3b2c25; --bag-band: #1b1512;
+    --bone: #1f5fbf; --checker: #e3e6ec; --shadow: rgba(10, 14, 22, 0.22);
+    --display: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
+    --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #101318; --surface: #181c23; --ink: #e9ecf2; --muted: #9aa3b2; --line: #2a303b;
+      --blue: #5b93ea; --red: #e5484f; --on-accent: #0c0f14;
+      --wall: #1a1f27; --wall-2: #232a35; --fence: rgba(200, 210, 230, 0.13); --post: #0b0d11;
+      --mat: #262c36; --mat-line: #384150; --bag: #4a382f; --bag-band: #241b17;
+      --bone: #7fb0ff; --checker: #222833; --shadow: rgba(0, 0, 0, 0.45);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #101318; --surface: #181c23; --ink: #e9ecf2; --muted: #9aa3b2; --line: #2a303b;
+    --blue: #5b93ea; --red: #e5484f; --on-accent: #0c0f14;
+    --wall: #1a1f27; --wall-2: #232a35; --fence: rgba(200, 210, 230, 0.13); --post: #0b0d11;
+    --mat: #262c36; --mat-line: #384150; --bag: #4a382f; --bag-band: #241b17;
+    --bone: #7fb0ff; --checker: #222833; --shadow: rgba(0, 0, 0, 0.45);
+    color-scheme: dark;
+  }
+  [hidden] { display: none !important; }
+  body { background: var(--bg); color: var(--ink); font: 400 15px/1.55 var(--body); }
+  .wrap {
+    max-width: 1040px; margin: 0 auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 32px 64px;
+    display: grid; gap: 40px;
+  }
+  header { display: grid; gap: 10px; }
+  .eyebrow { font: 500 12px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  h1, h2 { font-family: var(--display); font-weight: 800; text-transform: uppercase; letter-spacing: 0.01em; line-height: 0.95; margin: 0; text-wrap: balance; }
+  h1 { font-size: clamp(40px, 7vw, 68px); }
+  h1 .corner { color: var(--red); }
+  h2 { font-size: 30px; }
+  p { margin: 0; max-width: 65ch; }
+  .lede { font-size: 17px; color: var(--muted); }
+
+  .stage { display: grid; gap: 14px; }
+  .canvas-box { position: relative; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--wall); }
+  canvas { display: block; width: 100%; aspect-ratio: 760 / 420; max-width: 100%; }
+  .status { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; background: var(--surface); color: var(--muted); }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 18px 28px; align-items: flex-end; }
+  .group { display: grid; gap: 6px; min-width: 0; }
+  .group-label { font: 500 11px/1 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; }
+  button, select {
+    font: 600 14px/1 var(--body); color: var(--ink); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 4px; padding: 9px 12px; cursor: pointer;
+  }
+  button:hover, select:hover { border-color: var(--muted); }
+  button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  button.move { display: inline-flex; gap: 8px; align-items: center; }
+  button.move.active { background: var(--blue); border-color: var(--blue); color: var(--on-accent); }
+  kbd { font: 500 11px/1 var(--mono); padding: 3px 5px; border-radius: 3px; border: 1px solid currentColor; opacity: 0.7; }
+  .check { display: inline-flex; gap: 8px; align-items: center; font-weight: 600; padding: 8px 0; cursor: pointer; }
+  .check input { width: 16px; height: 16px; accent-color: var(--blue); }
+
+  section { display: grid; gap: 14px; }
+  .sheet { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+  figure { margin: 0; display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+  .swatch {
+    height: 170px; display: grid; place-items: center; border-radius: 4px;
+    background-color: var(--surface);
+    background-image: conic-gradient(var(--checker) 25%, transparent 0 50%, var(--checker) 0 75%, transparent 0);
+    background-size: 14px 14px;
+  }
+  .pin { position: relative; line-height: 0; }
+  .pin img { display: block; }
+  .pin i {
+    position: absolute; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%;
+    background: var(--red); box-shadow: 0 0 0 2px var(--surface);
+  }
+  figcaption { display: grid; gap: 2px; font: 400 12px/1.4 var(--mono); color: var(--muted); }
+  figcaption b { font: 500 13px/1.3 var(--mono); color: var(--ink); }
+  .legend { display: flex; gap: 8px; align-items: center; font-size: 14px; color: var(--muted); }
+  .legend i { width: 9px; height: 9px; border-radius: 50%; background: var(--red); flex: none; }
+
+  .rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px 28px; margin: 0; padding: 0; list-style: none; }
+  .rules li { display: grid; gap: 4px; padding-top: 12px; border-top: 2px solid var(--ink); min-width: 0; }
+  .rules strong { font: 700 20px/1.1 var(--display); text-transform: uppercase; letter-spacing: 0.02em; }
+  .rules span { color: var(--muted); }
+  code { font: 400 13px/1.4 var(--mono); }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">2D MMA &middot; Art pipeline sample</div>
+    <h1>Fighter sprite <span class="corner">rig</span></h1>
+    <p class="lede">One fighter, built the way the game will build all of them: nine body-part drawings pinned to a skeleton. Every move below reuses the same drawings. Change the gloves or shorts and every move still works.</p>
+  </header>
+
+  <div class="stage">
+    <div class="canvas-box">
+      <canvas id="stage" width="760" height="420" role="img" aria-label="A Muay Thai fighter in stance beside a heavy bag, animated from body-part sprites"></canvas>
+      <div class="status" id="status">Loading parts&hellip;</div>
+    </div>
+    <div class="controls">
+      <div class="group">
+        <span class="group-label">Moves</span>
+        <div class="row" id="moves"></div>
+      </div>
+      <div class="group" id="gear"></div>
+      <div class="group">
+        <span class="group-label">View</span>
+        <div class="row">
+          <select id="speed" aria-label="Playback speed">
+            <option value="1">Speed 1&times;</option>
+            <option value="0.5">Speed &frac12;&times;</option>
+            <option value="0.2">Speed &frac15;&times;</option>
+          </select>
+          <label class="check" for="show-bones"><input type="checkbox" id="show-bones"> Show skeleton</label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section>
+    <h2>Parts sheet</h2>
+    <p>This is everything an artist hands over for this fighter. Each part is drawn once, upright, on a transparent background.</p>
+    <div class="legend"><i></i> The pivot: the joint the part rotates around. It must sit in the same spot on every version of a part.</div>
+    <div class="sheet" id="sheet"></div>
+  </section>
+
+  <section>
+    <h2>Rules for the artist</h2>
+    <ul class="rules">
+      <li><strong>Draw the near side only</strong><span>The far arm and leg reuse the same drawings. The engine shades them darker and draws them behind the body.</span></li>
+      <li><strong>Overlap at the joints</strong><span>Round off the ends of each limb so elbows and knees never show a gap when they bend.</span></li>
+      <li><strong>Same canvas, same pivot</strong><span>Gear versions of a part (gloves, shorts) keep the base part's size and pivot so they swap in cleanly.</span></li>
+      <li><strong>Facing right, 1&times; scale</strong><span>The fighter faces right and stands about 290px tall. Deliver SVG, or PNG at 2&times;.</span></li>
+    </ul>
+    <p>Bone lengths, pivots and attach points live in <code>rig.json</code>. Poses and timing live in <code>animations.json</code>. The full spec is in <code>docs/SPRITE_SPEC.md</code>.</p>
+  </section>
+</div>
+
+<script>
+(() => {
+  const D = Math.PI / 180;
+  const W = 760, H = 420, FLOOR = 360, BASE_X = 290, BAG_X = 470, BAG_TOP = 70, BAG_BOTTOM = 300, BAG_W = 58;
+  const canvas = document.getElementById('stage');
+  const ctx = canvas.getContext('2d');
+  const statusEl = document.getElementById('status');
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let rig, anims;
+  const imgs = {}, resolved = {};
+  const state = { anim: 'idle', t: 0, speed: 1, bones: false, gear: {} };
+  const bag = { a: 0, v: 0 };
+  let colors = {}, scale = 1, last = performance.now();
+
+  async function getJSON(url) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(url + ' returned ' + res.status);
+    return res.json();
+  }
+
+  function loadImage(src) {
+    return new Promise((resolve, reject) => {
+      const im = new Image();
+      im.onload = () => resolve(im);
+      im.onerror = () => reject(new Error('Could not load ' + src));
+      im.src = src;
+    });
+  }
+
+  // Far-side limbs reuse the near-side drawing, darkened once at load.
+  function tinted(im, part) {
+    const s = 3, c = document.createElement('canvas');
+    c.width = part.size[0] * s; c.height = part.size[1] * s;
+    const g = c.getContext('2d');
+    g.drawImage(im, 0, 0, c.width, c.height);
+    g.globalCompositeOperation = 'source-atop';
+    g.fillStyle = rig.farTint;
+    g.fillRect(0, 0, c.width, c.height);
+    return c;
+  }
+
+  async function boot() {
+    try {
+      [rig, anims] = await Promise.all([getJSON('rig.json'), getJSON('animations.json')]);
+      await Promise.all(Object.entries(rig.parts).map(async ([key, part]) => {
+        const im = await loadImage(part.file);
+        imgs[key] = { near: im, far: tinted(im, part) };
+      }));
+    } catch (err) {
+      statusEl.textContent = 'The rig files did not load (' + err.message + '). Open this page through a local web server, for example "npx serve art/example-fighter", not straight from disk.';
+      return;
+    }
+    statusEl.hidden = true;
+    for (const [slot, g] of Object.entries(rig.gear)) state.gear[slot] = g.default;
+    for (const [name, pose] of Object.entries(anims.poses)) resolved[name] = resolvePose(pose);
+    buildControls();
+    buildSheet();
+    readColors();
+    resize();
+    requestAnimationFrame(frame);
+  }
+
+  // Fill in every bone so poses can be blended number by number. Feet left out stay level.
+  function resolvePose(pose) {
+    const out = { x: pose.root?.x || 0, rot: pose.root?.rot || 0 };
+    const world = {};
+    for (const b of rig.bones) {
+      if (!b.parent) { world[b.id] = out.rot; continue; }
+      let v = pose[b.id];
+      if (v === undefined) v = b.level ? -world[b.parent] : 0;
+      out[b.id] = v;
+      world[b.id] = world[b.parent] + v;
+    }
+    return out;
+  }
+
+  function blend(a, b, u) {
+    const out = {};
+    for (const k in a) out[k] = a[k] + (b[k] - a[k]) * u;
+    return out;
+  }
+
+  function sample(anim, t) {
+    const keys = anim.keys;
+    for (let i = 0; i < keys.length - 1; i++) {
+      const k0 = keys[i], k1 = keys[i + 1];
+      if (t <= k1.t) {
+        let u = (t - k0.t) / (k1.t - k0.t || 1);
+        u = u * u * (3 - 2 * u);
+        return blend(resolved[k0.pose], resolved[k1.pose], u);
+      }
+    }
+    return resolved[keys[keys.length - 1].pose];
+  }
+
+  function solve(p) {
+    const w = {};
+    for (const b of rig.bones) {
+      if (!b.parent) { w[b.id] = { x: p.x, y: 0, a: p.rot }; continue; }
+      const P = w[b.parent], r = P.a * D, [ax, ay] = b.at;
+      w[b.id] = {
+        x: P.x + ax * Math.cos(r) - ay * Math.sin(r),
+        y: P.y + ax * Math.sin(r) + ay * Math.cos(r),
+        a: P.a + p[b.id]
+      };
+    }
+    return w;
+  }
+
+  function partFor(key) {
+    if (key[0] !== '@') return key;
+    for (const [slot, g] of Object.entries(rig.gear)) {
+      const hit = g.options[state.gear[slot]].parts[key];
+      if (hit) return hit;
+    }
+    return key;
+  }
+
+  function play(name) {
+    state.anim = name;
+    state.t = 0;
+    document.querySelectorAll('button.move').forEach(b => b.classList.toggle('active', b.dataset.anim === name));
+  }
+
+  function buildControls() {
+    const moves = document.getElementById('moves');
+    for (const [name, a] of Object.entries(anims.animations)) {
+      if (a.loop) continue;
+      const btn = document.createElement('button');
+      btn.className = 'move';
+      btn.type = 'button';
+      btn.dataset.anim = name;
+      btn.innerHTML = a.label + (a.key ? ' <kbd>' + a.key.toUpperCase() + '</kbd>' : '');
+      btn.addEventListener('click', () => play(name));
+      moves.appendChild(btn);
+    }
+    const gear = document.getElementById('gear');
+    gear.innerHTML = '<span class="group-label">Gear</span>';
+    const row = document.createElement('div');
+    row.className = 'row';
+    for (const [slot, g] of Object.entries(rig.gear)) {
+      const sel = document.createElement('select');
+      sel.id = 'gear-' + slot;
+      sel.setAttribute('aria-label', g.label);
+      for (const [id, opt] of Object.entries(g.options)) sel.add(new Option(opt.label, id, false, id === g.default));
+      sel.addEventListener('change', () => { state.gear[slot] = sel.value; });
+      row.appendChild(sel);
+    }
+    gear.appendChild(row);
+    document.getElementById('speed').addEventListener('change', e => { state.speed = +e.target.value; });
+    document.getElementById('show-bones').addEventListener('change', e => { state.bones = e.target.checked; });
+    addEventListener('keydown', e => {
+      if (e.target.closest('select, input:not([type=checkbox])') || e.metaKey || e.ctrlKey || e.altKey) return;
+      for (const [name, a] of Object.entries(anims.animations)) if (a.key === e.key.toLowerCase()) play(name);
+    });
+  }
+
+  function buildSheet() {
+    const sheet = document.getElementById('sheet');
+    const zoom = 1.6;
+    for (const [key, part] of Object.entries(rig.parts)) {
+      const [w, h] = part.size, [px, py] = part.pivot;
+      const fig = document.createElement('figure');
+      fig.innerHTML =
+        '<div class="swatch"><div class="pin">' +
+          '<img src="' + part.file + '" width="' + Math.round(w * zoom) + '" height="' + Math.round(h * zoom) + '" alt="">' +
+          '<i style="left:' + (px / w * 100) + '%;top:' + (py / h * 100) + '%"></i>' +
+        '</div></div>' +
+        '<figcaption><b>' + key + '</b><span>' + w + ' \u00d7 ' + h + ' px</span><span>pivot ' + px + ', ' + py + '</span></figcaption>';
+      sheet.appendChild(fig);
+    }
+  }
+
+  function readColors() {
+    const cs = getComputedStyle(document.documentElement);
+    for (const name of ['wall', 'wall-2', 'fence', 'post', 'mat', 'mat-line', 'bag', 'bag-band', 'bone', 'shadow', 'surface'])
+      colors[name] = cs.getPropertyValue('--' + name).trim();
+  }
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', readColors);
+  new MutationObserver(readColors).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  function resize() {
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    const cssW = canvas.getBoundingClientRect().width || W;
+    canvas.width = Math.round(cssW * dpr);
+    canvas.height = Math.round(cssW * H / W * dpr);
+    scale = canvas.width / W;
+  }
+  addEventListener('resize', resize);
+
+  function drawScene() {
+    const g = ctx.createLinearGradient(0, 0, 0, FLOOR);
+    g.addColorStop(0, colors['wall-2']);
+    g.addColorStop(1, colors.wall);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+    // Chain-link cage fence
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, 30, W, 300); ctx.clip();
+    ctx.strokeStyle = colors.fence; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let x = -320; x < W + 320; x += 24) {
+      ctx.moveTo(x, 30); ctx.lineTo(x + 300, 330);
+      ctx.moveTo(x + 300, 30); ctx.lineTo(x, 330);
+    }
+    ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = colors.post;
+    ctx.fillRect(0, 24, W, 8);
+    ctx.fillRect(36, 24, 16, 310);
+    ctx.fillRect(W - 52, 24, 16, 310);
+    // Mat
+    ctx.fillStyle = colors.mat;
+    ctx.fillRect(0, 330, W, H - 330);
+    ctx.fillStyle = colors['mat-line'];
+    ctx.fillRect(0, 330, W, 3);
+  }
+
+  function drawBag() {
+    ctx.save();
+    ctx.translate(BAG_X, 0);
+    ctx.rotate(bag.a);
+    ctx.strokeStyle = colors.post; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, BAG_TOP); ctx.stroke();
+    ctx.fillStyle = colors.bag;
+    ctx.beginPath();
+    ctx.roundRect(-BAG_W / 2, BAG_TOP, BAG_W, BAG_BOTTOM - BAG_TOP, [10, 10, 18, 18]);
+    ctx.fill();
+    ctx.fillStyle = colors['bag-band'];
+    for (const y of [BAG_TOP + 22, BAG_BOTTOM - 34]) ctx.fillRect(-BAG_W / 2, y, BAG_W, 8);
+    ctx.restore();
+  }
+
+  function drawFighter(world) {
+    let lowest = -Infinity, feetX = 0, n = 0;
+    for (const b of rig.bones) {
+      if (!b.sole) continue;
+      const t = world[b.id], r = t.a * D;
+      for (const [sx, sy] of b.sole) lowest = Math.max(lowest, t.y + sx * Math.sin(r) + sy * Math.cos(r));
+      feetX += t.x; n++;
+    }
+    const ox = BASE_X, oy = FLOOR - lowest;
+
+    ctx.fillStyle = colors.shadow;
+    ctx.beginPath();
+    ctx.ellipse(ox + feetX / n + 10, FLOOR - 1, 78, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    for (const s of rig.draw) {
+      const key = partFor(s.part), part = rig.parts[key], t = world[s.bone];
+      ctx.save();
+      ctx.translate(ox + t.x, oy + t.y);
+      ctx.rotate(t.a * D);
+      ctx.drawImage(s.far ? imgs[key].far : imgs[key].near, -part.pivot[0], -part.pivot[1], part.size[0], part.size[1]);
+      ctx.restore();
+    }
+
+    if (!state.bones) return;
+    ctx.strokeStyle = colors.bone; ctx.fillStyle = colors.bone; ctx.lineWidth = 2;
+    for (const b of rig.bones) {
+      const t = world[b.id];
+      if (b.parent) {
+        const p = world[b.parent];
+        ctx.beginPath(); ctx.moveTo(ox + p.x, oy + p.y); ctx.lineTo(ox + t.x, oy + t.y); ctx.stroke();
+      }
+      ctx.beginPath(); ctx.arc(ox + t.x, oy + t.y, 3.5, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
+  function frame(now) {
+    const dt = Math.min(50, now - last) * state.speed;
+    last = now;
+    const anim = anims.animations[state.anim];
+    const total = anim.keys[anim.keys.length - 1].t;
+    const prev = state.t;
+    if (!(anim.loop && reduceMotion)) state.t += dt;
+    for (const ev of anim.events || []) if (ev.type === 'impact' && prev < ev.t && state.t >= ev.t) bag.v += ev.force;
+    if (anim.loop) state.t %= total;
+    else if (state.t >= total) play('idle');
+
+    // Heavy bag: a damped pendulum.
+    const s = dt / 1000;
+    bag.v += (-18 * bag.a - 2.4 * bag.v) * s;
+    bag.a += bag.v * s;
+
+    const current = anims.animations[state.anim];
+    const pose = sample(current, current.loop ? state.t : Math.min(state.t, total));
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    drawScene();
+    drawBag();
+    drawFighter(solve(pose));
+    requestAnimationFrame(frame);
+  }
+
+  boot();
+})();
+</script>

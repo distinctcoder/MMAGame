@@ -1,0 +1,75 @@
+{
+  "name": "example-fighter",
+  "units": "Pixels at 1x. Fighter stands about 290px tall.",
+  "facing": "right",
+  "conventions": "Each bone points down (+y) at 0 degrees. Negative angles swing a limb forward (toward +x). 'at' is where the bone attaches, in its parent's local space.",
+  "farTint": "rgba(22, 14, 34, 0.30)",
+  "parts": {
+    "head":         { "file": "parts/head.svg",         "size": [50, 60],  "pivot": [21, 56] },
+    "torso":        { "file": "parts/torso.svg",        "size": [66, 112], "pivot": [30, 108] },
+    "pelvis_mt":    { "file": "parts/pelvis_mt.svg",    "size": [60, 46],  "pivot": [30, 8] },
+    "pelvis_mma":   { "file": "parts/pelvis_mma.svg",   "size": [60, 46],  "pivot": [30, 8] },
+    "upper_arm":    { "file": "parts/upper_arm.svg",    "size": [26, 66],  "pivot": [13, 9] },
+    "forearm":      { "file": "parts/forearm.svg",      "size": [22, 56],  "pivot": [11, 6] },
+    "glove_mt_red": { "file": "parts/glove_mt_red.svg", "size": [36, 44],  "pivot": [16, 5] },
+    "glove_mt_blue":{ "file": "parts/glove_mt_blue.svg","size": [36, 44],  "pivot": [16, 5] },
+    "glove_mma":    { "file": "parts/glove_mma.svg",    "size": [30, 36],  "pivot": [14, 5] },
+    "thigh_mt":     { "file": "parts/thigh_mt.svg",     "size": [38, 84],  "pivot": [19, 10] },
+    "thigh_mma":    { "file": "parts/thigh_mma.svg",    "size": [38, 84],  "pivot": [19, 10] },
+    "shin":         { "file": "parts/shin.svg",         "size": [28, 76],  "pivot": [14, 6] },
+    "foot":         { "file": "parts/foot.svg",         "size": [46, 22],  "pivot": [10, 5] }
+  },
+  "bones": [
+    { "id": "root",       "parent": null },
+    { "id": "torso",      "parent": "root",       "at": [0, -4] },
+    { "id": "head",       "parent": "torso",      "at": [4, -100] },
+    { "id": "lead_upper", "parent": "torso",      "at": [2, -88] },
+    { "id": "lead_fore",  "parent": "lead_upper", "at": [0, 54] },
+    { "id": "lead_hand",  "parent": "lead_fore",  "at": [0, 46] },
+    { "id": "rear_upper", "parent": "torso",      "at": [2, -88] },
+    { "id": "rear_fore",  "parent": "rear_upper", "at": [0, 54] },
+    { "id": "rear_hand",  "parent": "rear_fore",  "at": [0, 46] },
+    { "id": "lead_thigh", "parent": "root",       "at": [3, 12] },
+    { "id": "lead_shin",  "parent": "lead_thigh", "at": [0, 70] },
+    { "id": "lead_foot",  "parent": "lead_shin",  "at": [0, 66], "level": true, "sole": [[-6, 14], [32, 14]] },
+    { "id": "rear_thigh", "parent": "root",       "at": [-3, 12] },
+    { "id": "rear_shin",  "parent": "rear_thigh", "at": [0, 70] },
+    { "id": "rear_foot",  "parent": "rear_shin",  "at": [0, 66], "level": true, "sole": [[-6, 14], [32, 14]] }
+  ],
+  "draw": [
+    { "bone": "lead_upper", "part": "upper_arm", "far": true },
+    { "bone": "lead_fore",  "part": "forearm",   "far": true },
+    { "bone": "lead_hand",  "part": "@hand",     "far": true },
+    { "bone": "lead_foot",  "part": "foot",      "far": true },
+    { "bone": "lead_shin",  "part": "shin",      "far": true },
+    { "bone": "lead_thigh", "part": "@thigh",    "far": true },
+    { "bone": "torso",      "part": "torso" },
+    { "bone": "root",       "part": "@pelvis" },
+    { "bone": "rear_foot",  "part": "foot" },
+    { "bone": "rear_shin",  "part": "shin" },
+    { "bone": "rear_thigh", "part": "@thigh" },
+    { "bone": "head",       "part": "head" },
+    { "bone": "rear_upper", "part": "upper_arm" },
+    { "bone": "rear_fore",  "part": "forearm" },
+    { "bone": "rear_hand",  "part": "@hand" }
+  ],
+  "gear": {
+    "gloves": {
+      "label": "Gloves",
+      "default": "mt_red",
+      "options": {
+        "mt_red":  { "label": "Muay Thai 10oz, red",  "parts": { "@hand": "glove_mt_red" } },
+        "mt_blue": { "label": "Muay Thai 10oz, blue", "parts": { "@hand": "glove_mt_blue" } },
+        "mma":     { "label": "MMA 4oz open-finger",  "parts": { "@hand": "glove_mma" } }
+      }
+    },
+    "shorts": {
+      "label": "Shorts",
+      "default": "mt",
+      "options": {
+        "mt":  { "label": "Muay Thai satin",  "parts": { "@pelvis": "pelvis_mt",  "@thigh": "thigh_mt" } },
+        "mma": { "label": "MMA board shorts", "parts": { "@pelvis": "pelvis_mma", "@thigh": "thigh_mma" } }
+      }
+    }
+  }
+}

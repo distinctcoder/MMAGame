@@ -1,0 +1,20 @@
+{
+  "notes": "Poses list bone angles in degrees, relative to the parent bone. Feet left out of a pose stay flat on the floor. The engine keeps the lowest foot on the mat.",
+  "poses": {
+    "stance":       { "torso": 6,  "head": -4, "lead_upper": -45, "lead_fore": -125, "lead_hand": 10, "rear_upper": -25, "rear_fore": -150, "rear_hand": 10, "lead_thigh": -25, "lead_shin": 18, "rear_thigh": 18, "rear_shin": 8 },
+    "stance_b":     { "torso": 8,  "head": -4, "lead_upper": -42, "lead_fore": -128, "lead_hand": 10, "rear_upper": -22, "rear_fore": -152, "rear_hand": 10, "lead_thigh": -29, "lead_shin": 30, "rear_thigh": 13, "rear_shin": 24 },
+    "jab":          { "root": { "x": 8 },  "torso": 12, "head": -8,  "lead_upper": -96,  "lead_fore": -4,   "lead_hand": 0,  "rear_upper": -28, "rear_fore": -148, "rear_hand": 10, "lead_thigh": -32, "lead_shin": 22, "rear_thigh": 22, "rear_shin": 4 },
+    "cross":        { "root": { "x": 14 }, "torso": 18, "head": -10, "lead_upper": -30,  "lead_fore": -150, "lead_hand": 10, "rear_upper": -100, "rear_fore": -2,  "rear_hand": 0,  "lead_thigh": -34, "lead_shin": 24, "rear_thigh": 26, "rear_shin": 0 },
+    "kick_chamber": { "root": { "x": 6 },  "torso": -8, "head": 4,   "lead_upper": -50,  "lead_fore": -120, "lead_hand": 10, "rear_upper": 20,  "rear_fore": -40,  "rear_hand": 0,  "lead_thigh": -8,  "lead_shin": 8,  "rear_thigh": -75, "rear_shin": 95, "rear_foot": 40 },
+    "kick_extend":  { "root": { "x": 14 }, "torso": -24, "head": 10, "lead_upper": -60,  "lead_fore": -110, "lead_hand": 10, "rear_upper": 55,  "rear_fore": -20,  "rear_hand": 0,  "lead_thigh": 5,   "lead_shin": 0,  "rear_thigh": -105, "rear_shin": -5, "rear_foot": 80 },
+    "hit":          { "root": { "x": -14 }, "torso": -16, "head": -28, "lead_upper": -20, "lead_fore": -70,  "lead_hand": 0,  "rear_upper": 5,   "rear_fore": -100, "rear_hand": 0,  "lead_thigh": -18, "lead_shin": 22, "rear_thigh": 24, "rear_shin": 14 }
+  },
+  "animations": {
+    "idle":       { "label": "Idle", "loop": true, "keys": [ { "pose": "stance", "t": 0 }, { "pose": "stance_b", "t": 420 }, { "pose": "stance", "t": 840 } ] },
+    "jab":        { "label": "Jab", "key": "j", "keys": [ { "pose": "stance", "t": 0 }, { "pose": "jab", "t": 90 }, { "pose": "jab", "t": 150 }, { "pose": "stance", "t": 320 } ], "events": [ { "t": 90, "type": "impact", "force": 0.7 } ] },
+    "cross":      { "label": "Cross", "key": "k", "keys": [ { "pose": "stance", "t": 0 }, { "pose": "cross", "t": 110 }, { "pose": "cross", "t": 170 }, { "pose": "stance", "t": 380 } ], "events": [ { "t": 110, "type": "impact", "force": 0.95 } ] },
+    "one_two":    { "label": "1-2 combo", "key": "u", "keys": [ { "pose": "stance", "t": 0 }, { "pose": "jab", "t": 90 }, { "pose": "jab", "t": 140 }, { "pose": "stance", "t": 260 }, { "pose": "cross", "t": 370 }, { "pose": "cross", "t": 430 }, { "pose": "stance", "t": 640 } ], "events": [ { "t": 90, "type": "impact", "force": 0.7 }, { "t": 370, "type": "impact", "force": 0.95 } ] },
+    "roundhouse": { "label": "Rear roundhouse", "key": "l", "keys": [ { "pose": "stance", "t": 0 }, { "pose": "kick_chamber", "t": 160 }, { "pose": "kick_extend", "t": 300 }, { "pose": "kick_extend", "t": 380 }, { "pose": "kick_chamber", "t": 520 }, { "pose": "stance", "t": 720 } ], "events": [ { "t": 300, "type": "impact", "force": 1.5 } ] },
+    "hit":        { "label": "Take a shot", "key": "h", "keys": [ { "pose": "stance", "t": 0 }, { "pose": "hit", "t": 70 }, { "pose": "hit", "t": 170 }, { "pose": "stance", "t": 520 } ] }
+  }
+}
