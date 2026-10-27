@@ -33,6 +33,9 @@
     "hit_low":       { "pelvis": { "b": [0, 84, -2] }, "rot": [0, -5, 6], "spine": [4, -30, -6], "lf": { "h": [9, 7, 16] } },
     "ko":            { "pelvis": { "b": [0, 12, -55] }, "rot": [-90, 0, 0], "spine": [0, 0, 0], "head": [8, 25, 0],
                        "lh": { "hc": [30, -5, 10] }, "rh": { "hc": [-30, -5, 12] }, "lf": { "h": [16, 6, 30] }, "rf": { "h": [-18, 6, 22] } },
+    "ref_stand":     { "pelvis": { "b": [0, 96, 0] }, "spine": [0, 0, 0], "head": [0, 0, 0], "lh": { "hc": [17, -32, 0] }, "rh": { "hc": [-17, -32, 0] }, "lf": { "h": [10, 7, 4] }, "rf": { "h": [-10, 7, -4] } },
+    "ref_watch":     { "pelvis": { "b": [0, 80, -6] }, "spine": [35, 0, 0], "head": [-28, 0, 0], "lh": { "hc": [13, -34, 22] }, "rh": { "hc": [-13, -34, 22] }, "lf": { "h": [15, 7, 6] }, "rf": { "h": [-15, 7, -6] } },
+    "ref_stop":      { "pelvis": { "b": [0, 90, 6] }, "spine": [20, 0, 0], "head": [-15, 0, 0], "lh": { "hc": [12, 28, 32] }, "rh": { "hc": [-14, 2, 32] }, "lf": { "h": [12, 7, 26] }, "rf": { "h": [-12, 7, -14] } },
     "win":           { "pelvis": { "b": [0, 93, 0] }, "spine": [-4, -10, 0], "head": [-14, 0, 0], "lh": { "hc": [22, 55, 4] }, "rh": { "hc": [-22, 55, 4] }, "lf": { "h": [12, 7, 8] }, "rf": { "h": [-12, 7, -8] } }
   },
   "strikes": {
@@ -52,17 +55,17 @@
     "low":   { "label": "Check",       "key": "S", "arrow": "↓", "covers": "low kick" }
   },
   "styles": {
-    "boxing":    { "label": "Boxing",    "power": 80, "speed": 88, "defense": 82, "chin": 75, "cardio": 78, "kicks": 15, "range": 78,  "aggression": 1.1,
+    "boxing":    { "label": "Boxing", "takedowns": 20, "td_defense": 55, "top": 35, "guard": 25,    "power": 80, "speed": 88, "defense": 82, "chin": 75, "cardio": 78, "kicks": 15, "range": 78,  "aggression": 1.1,
                    "mix": { "jab": 5, "cross": 4, "lead_hook": 4, "rear_hook": 3 } },
-    "muay_thai": { "label": "Muay Thai", "power": 80, "speed": 70, "defense": 76, "chin": 78, "cardio": 86, "kicks": 92, "range": 100, "aggression": 1.0,
+    "muay_thai": { "label": "Muay Thai", "takedowns": 35, "td_defense": 65, "top": 45, "guard": 35, "power": 80, "speed": 70, "defense": 76, "chin": 78, "cardio": 86, "kicks": 92, "range": 100, "aggression": 1.0,
                    "mix": { "jab": 2, "cross": 2, "lead_hook": 1, "rear_hook": 1, "low_kick": 4, "body_kick": 4, "head_kick": 2 } },
-    "karate":    { "label": "Karate",    "power": 66, "speed": 92, "defense": 76, "chin": 66, "cardio": 76, "kicks": 82, "range": 112, "aggression": 0.8,
+    "karate":    { "label": "Karate", "takedowns": 30, "td_defense": 55, "top": 40, "guard": 35,    "power": 66, "speed": 92, "defense": 76, "chin": 66, "cardio": 76, "kicks": 82, "range": 112, "aggression": 0.8,
                    "mix": { "jab": 4, "cross": 3, "lead_hook": 0.5, "rear_hook": 0.5, "low_kick": 1, "body_kick": 2, "head_kick": 3 } },
-    "mma":       { "label": "MMA",       "power": 72, "speed": 74, "defense": 70, "chin": 72, "cardio": 74, "kicks": 66, "range": 95,  "aggression": 1.0,
+    "mma":       { "label": "MMA", "takedowns": 70, "td_defense": 70, "top": 70, "guard": 65,       "power": 72, "speed": 74, "defense": 70, "chin": 72, "cardio": 74, "kicks": 66, "range": 95,  "aggression": 1.0,
                    "mix": { "jab": 3, "cross": 3, "lead_hook": 2, "rear_hook": 2, "low_kick": 2, "body_kick": 2, "head_kick": 1 } },
-    "wrestling": { "label": "Wrestling", "power": 64, "speed": 60, "defense": 56, "chin": 80, "cardio": 88, "kicks": 30, "range": 85,  "aggression": 0.9,
+    "wrestling": { "label": "Wrestling", "takedowns": 90, "td_defense": 85, "top": 82, "guard": 40, "power": 64, "speed": 60, "defense": 56, "chin": 80, "cardio": 88, "kicks": 30, "range": 85,  "aggression": 0.9,
                    "mix": { "jab": 2, "cross": 3, "lead_hook": 2, "rear_hook": 2, "low_kick": 1 } },
-    "bjj":       { "label": "BJJ",       "power": 52, "speed": 56, "defense": 50, "chin": 66, "cardio": 72, "kicks": 40, "range": 95,  "aggression": 0.7,
+    "bjj":       { "label": "BJJ", "takedowns": 55, "td_defense": 50, "top": 70, "guard": 92,       "power": 52, "speed": 56, "defense": 50, "chin": 66, "cardio": 72, "kicks": 40, "range": 95,  "aggression": 0.7,
                    "mix": { "jab": 3, "cross": 1, "lead_hook": 1, "rear_hook": 1, "low_kick": 1, "body_kick": 1 } }
   }
 }

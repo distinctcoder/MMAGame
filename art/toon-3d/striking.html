@@ -428,7 +428,7 @@ function finish(winner, loser, how, detail) {
 }
 function decision() {
   const r = F.red.dealt, b = F.blue.dealt;
-  if (Math.abs(r - b) < 1) { G.over = true; hideTell(); banner('Draw', 'Even on the judges’ cards', 0); return; }
+  if (Math.abs(r - b) < 1) { G.over = true; hideTell(); banner('Draw', 'Even on the judges\u2019 cards', 0); return; }
   const w = r > b ? F.red : F.blue;
   G.over = true; hideTell();
   w.action = { type: 'done' }; setAnim(w, 'win', 700);
@@ -616,7 +616,7 @@ function buildControls() {
   for (const s of Object.values(data.strikes)) {
     const z = data.zones[s.zone];
     html += '<tr><td>' + s.label + '</td><td><kbd>' + s.key.toUpperCase() + '</kbd></td><td><span class="zone">' + z.arrow + ' ' + z.label + '</span></td>' +
-      '<td class="num">' + s.windup + ' ms</td><td class="num">' + s.dmg + '</td><td>' + s.part + '</td><td class="num">' + s.range[0] + '–' + s.range[1] + '</td><td class="num">' + s.cost + '</td></tr>';
+      '<td class="num">' + s.windup + ' ms</td><td class="num">' + s.dmg + '</td><td>' + s.part + '</td><td class="num">' + s.range[0] + '\u2013' + s.range[1] + '</td><td class="num">' + s.cost + '</td></tr>';
   }
   $('chart').innerHTML = html + '</tbody>';
 }

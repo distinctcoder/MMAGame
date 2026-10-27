@@ -10,6 +10,7 @@ export const DIM = { hipX: 10, hipY: -3, abd: 20, chest: 30, shX: 18, shY: -5, n
 export const OUT = 1.1;
 
 export const PALETTES = {
+  ref:  { skin: '#e6b48f', shorts: '#2a2d34', trim: '#2a2d34', glove: '#e6b48f', cuff: '#e6b48f', hair: '#9aa0a8', shirt: '#1d1f24', pants: '#2a2d34', shoe: '#111216' },
   red:  { skin: '#e0a57c', shorts: '#c8232c', trim: '#f2f2f2', glove: '#23252b', cuff: '#c8232c', hair: '#241a14' },
   blue: { skin: '#8d5b3d', shorts: '#2457b5', trim: '#f2f2f2', glove: '#23252b', cuff: '#2457b5', hair: '#0e0a08' }
 };
@@ -145,6 +146,10 @@ export function createStage(canvas) {
   const Y = V(0, 1, 0);
   function makeFighter(pal) {
     const m = { skin: toon(pal.skin), shorts: toon(pal.shorts), trim: toon(pal.trim), glove: toon(pal.glove), cuff: toon(pal.cuff), hair: toon(pal.hair), eye: new THREE.MeshBasicMaterial({ color: '#16100c' }) };
+    // Optional outfit (the referee): a shirt over the torso and upper arms, long pants and shoes.
+    m.shirt = pal.shirt ? toon(pal.shirt) : m.skin;
+    m.pants = pal.pants ? toon(pal.pants) : m.skin;
+    m.shoe = pal.shoe ? toon(pal.shoe) : m.skin;
     const pieces = [];
     const mesh = (geo, mat, outlineGeo) => {
       const a = new THREE.Mesh(geo, mat); scene.add(a);
@@ -176,8 +181,8 @@ export function createStage(canvas) {
     // Torso
     ell([15.5, 11.5, 11.5], m.shorts, (j, st) => [add(j.pelvis, st.Qp, [0, 1, 0]), st.Qp]);
     ell([15.9, 2.4, 11.9], m.trim, (j, st) => [add(j.pelvis, st.Qp, [0, 9.5, 0]), st.Qp], unitSphere, false);
-    ell([13.6, 13, 10.2], m.skin, (j, st) => { const q = st.Qp.clone().slerp(st.Qc, 0.5); return [add(j.abd, q, [0, -2, 0]), q]; });
-    ell([18.5, 16, 11.5], m.skin, (j, st) => [add(j.abd, st.Qc, [0, 17, 0.5]), st.Qc]);
+    ell([13.6, 13, 10.2], m.shirt, (j, st) => { const q = st.Qp.clone().slerp(st.Qc, 0.5); return [add(j.abd, q, [0, -2, 0]), q]; });
+    ell([18.5, 16, 11.5], m.shirt, (j, st) => [add(j.abd, st.Qc, [0, 17, 0.5]), st.Qc]);
     seg('chest', 'head', 5.6, 5.2, m.skin, 0.75);
     // Head
     ell([10, 11.5, 10.5], m.skin, (j, st) => [j.head, st.Qh]);
@@ -189,8 +194,9 @@ export function createStage(canvas) {
     ell([2.1, 2.6, 2.2], m.skin, (j, st) => [add(j.head, st.Qh, [0, -1.8, 10.3]), st.Qh], unitSphere, false);
     // Arms
     for (const s of ['l', 'r']) {
-      ball(s + 'sh', 6.6, m.skin);
+      ball(s + 'sh', 6.6, m.shirt);
       seg(s + 'sh', s + 'el', 6, 5, m.skin);
+      if (pal.shirt) seg(s + 'sh', s + 'el', 7, 6.4, m.shirt, 0.5);
       ball(s + 'el', 5, m.skin);
       seg(s + 'el', s + 'wr', 5, 4.2, m.skin);
       const gloveAt = j => { const d = j[s + 'wr'].clone().sub(j[s + 'el']).normalize(); return [j[s + 'wr'].clone().add(d.clone().multiplyScalar(5.5)), new THREE.Quaternion().setFromUnitVectors(Y, d)]; };
@@ -199,12 +205,12 @@ export function createStage(canvas) {
     }
     // Legs
     for (const s of ['l', 'r']) {
-      seg(s + 'hip', s + 'kn', 8.8, 6.6, m.skin);
-      seg(s + 'hip', s + 'kn', 10.4, 9.6, m.shorts, 0.45);
-      ball(s + 'kn', 6.6, m.skin);
-      seg(s + 'kn', s + 'an', 6.4, 4.4, m.skin);
-      ball(s + 'an', 4.5, m.skin);
-      ell([4.6, 3.4, 11], m.skin, (j, st) => {
+      seg(s + 'hip', s + 'kn', 8.8, 6.6, m.pants);
+      if (!pal.pants) seg(s + 'hip', s + 'kn', 10.4, 9.6, m.shorts, 0.45);
+      ball(s + 'kn', 6.6, m.pants);
+      seg(s + 'kn', s + 'an', 6.4, 4.4, m.pants);
+      ball(s + 'an', 4.5, m.pants);
+      ell([4.6, 3.4, 11], m.shoe, (j, st) => {
         const up = j[s + 'kn'].clone().sub(j[s + 'an']).normalize();
         const fd = st.fd.clone().sub(up.clone().multiplyScalar(st.fd.dot(up)));
         if (fd.lengthSq() < 1e-4) fd.set(1, 0, 0);
