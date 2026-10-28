@@ -281,7 +281,7 @@ function resolveStand(f, name) {
   const point = spec => {
     if (spec.h) return add(base, Qy, spec.h);
     if (spec.hc) return add(j.chest, Qy, spec.hc);
-    const name = spec.j.split('.')[1], oj = (f.action?.type === 'strike' && f.action.aim) || o.bodyJoints, oQy = qEuler([0, o.yaw, 0]);
+    const name = spec.j.split('.')[1], oj = (f.action?.type === 'strike' && !f.action.s?.track && f.action.aim) || o.bodyJoints, oQy = qEuler([0, o.yaw, 0]);
     return add(oj[name] || oj.pelvis, oQy, spec.o || [0, 0, 0]);
   };
   out.t = {}; out.p = {};
@@ -403,7 +403,7 @@ function maxSta(f) { return 100 - f.body * 0.4; }
 function resetFighter(f, x) {
   const s = st(f);
   Object.assign(f, { x, z: 0, fromX: x, toX: x, moveDur: 0, headMax: 80 + s.chin * 0.7, body: 0, legs: 0, sta: 100,
-    action: { type: 'idle', since: 0 }, queued: null, counterUntil: 0, dealt: 0, roundDealt: 0, shown: null, anim: null, nextThink: 0, plannedBlock: null });
+    action: { type: 'idle', since: 0 }, clinchUntil: 0, queued: null, counterUntil: 0, dealt: 0, roundDealt: 0, shown: null, anim: null, nextThink: 0, plannedBlock: null });
   f.headHP = f.headMax;
 }
 function face(f) {
@@ -579,6 +579,13 @@ function cpuStand(f) {
   const s = st(f), lv = LEVELS[G.level], o = other(f), dist = Math.abs(f.x - o.x);
   f.nextThink = G.now + rand(220, 520) / lv.aggr;
   if (G.now > G.nextShoot && dist < 110 && f.sta > 20 && Math.random() < s.takedowns / 100 * 0.16 * lv.aggr) { G.nextShoot = G.now + 4000; return shoot(f); }
+  // Clinch fighters sometimes decide to close the distance and tie up.
+  if (!f.clinchUntil && f.sta > 25 && Math.random() < s.clinch / 100 * 0.07 * lv.aggr) f.clinchUntil = G.now + 2500;
+  if (f.clinchUntil) {
+    if (G.now > f.clinchUntil) f.clinchUntil = 0;
+    else if (dist <= 78) { f.clinchUntil = 0; return enterClinch(f); }
+    else return startStep(f, 1);
+  }
   if (dist > s.range + 18 && Math.random() < 0.7) return startStep(f, 1);
   if (dist < s.range - 22 && Math.random() < 0.45) return startStep(f, -1);
   if (Math.random() > 0.65 * s.aggression * lv.aggr) return;
@@ -863,6 +870,124 @@ function tickSub() {
   if (done) { G.sub = null; $('sub').hidden = true; s.resolve(done); }
 }
 
+// ---------- Clinch ----------
+// The 'top' role is whoever holds the dominant tie. Knees and elbows are telegraphed, so the other fighter can block them.
+function enterClinch(att) {
+  if (G.mode !== 'stand' || att.action.type !== 'idle') return;
+  const def = other(att);
+  if (Math.abs(att.x - def.x) > 80) { if (isHuman(att)) pop(att.bodyJoints.head, 'Too far', 'miss'); return; }
+  act(async () => {
+    G.mode = 'grapple';
+    att.sta = Math.max(0, att.sta - 5);
+    beginPair(att);
+    await step(pair('clinch', 280));
+    G.mode = 'clinch'; G.lastAction = G.now; G.clinchSince = G.now;
+    log(att.name + ' ties up in the clinch');
+    banner('Clinch', att.name + ' has the tie', 900);
+  });
+}
+function clinchStrike(att, kind) {
+  act(async () => {
+    const def = other(att), ctrl = att === G.top, zone = kind === 'knee' ? 'body' : 'high', cpuDef = !isHuman(def);
+    const p = clamp(0.22 + st(def).defense / 260 - (ctrl ? 0.08 : 0) + LEVELS[G.level].def / 200, 0.05, 0.75);
+    const cpuBlocks = cpuDef && Math.random() < p;
+    if (!cpuDef) banner(kind === 'knee' ? 'Knee!' : 'Elbow!', 'Block ' + (zone === 'body' ? keyName('block') : keyName('block') + (device === 'pad' ? ' + up' : ' + W')), 500);
+    roleAnim(att, kind + '_cock', isHuman(att) ? 160 : 280);
+    if (cpuBlocks) roleAnim(def, 'block' + zone, 160);
+    await step(sleep(isHuman(att) ? 170 : 320));
+    const blocked = cpuDef ? cpuBlocks : performance.now() - G.blockAt < 520 && G.blockZone === zone;
+    att.sta = Math.max(0, att.sta - (kind === 'knee' ? 6 : 5));
+    await step(roleAnim(att, kind, 100));
+    const at = def.bodyJoints[kind === 'knee' ? 'abd' : 'head'], sa = st(att);
+    if (blocked) { pop(at, 'Blocked', 'block'); hurt(def, zone === 'body' ? 'body' : 'head', 1, att); }
+    else {
+      const dmg = Math.round((kind === 'knee' ? 9 * (0.6 + sa.clinch / 100 * 0.6) : 8) * (0.6 + sa.power / 100 * 0.6) * (ctrl ? 1 : 0.65) * rand(0.9, 1.1) * 10) / 10;
+      pop(at, Math.round(dmg), 'hit');
+      G.shake = Math.min(9, dmg * 0.6); rumble(isHuman(def) ? 0.9 : 0.3, 160);
+      roleAnim(def, kind === 'knee' ? 'hitbody' : 'hithead', 90);
+      hurt(def, kind === 'knee' ? 'body' : 'head', dmg, att);
+    }
+    await step(sleep(120));
+    if (checkFinish(att, def, kind === 'knee' ? 'Knees in the clinch' : 'Elbows in the clinch')) return;
+    roleAnim(att, null, 240);
+    await step(roleAnim(def, null, 280));
+  });
+}
+function clinchBlock(zone) {
+  if (G.mode !== 'clinch' || G.over) return;
+  G.blockAt = performance.now(); G.blockZone = zone;
+  const me = human(), at = G.blockAt;
+  roleAnim(me, 'block' + zone, 110);
+  setTimeout(() => { if (G.blockAt === at && !G.busy && G.mode === 'clinch') roleAnim(me, null, 240); }, 600);
+}
+function pummel(att) {
+  if (att === G.top) return;
+  act(async () => {
+    const def = other(att);
+    pair('clinch', 200, { top: 'pummel', bot: 'pummel' });
+    const r = await contest({ att, def, attStat: st(att).clinch, defStat: st(def).clinch, attTitle: 'Pummel for the tie!', defTitle: 'Keep the tie!' });
+    if (r.margin > 0) {
+      G.top = att; G.bot = def; G.d = -G.d;
+      log(att.name + ' wins the inside tie', r.detail);
+      banner('Tie won', att.name + ' takes control', 800);
+    } else log(def.name + ' keeps the tie', r.detail);
+    G.lastAction = G.now;
+    await step(pair('clinch', 420));
+  });
+}
+function trip(att) {
+  act(async () => {
+    const def = other(att), ctrl = att === G.top;
+    const r = await contest({ att, def, attStat: (st(att).clinch + st(att).takedowns) / 2 + (ctrl ? 10 : -8), defStat: st(def).td_defense, attTitle: 'Trip!', defTitle: 'Stay on your feet!' });
+    if (r.margin > 0) {
+      if (!ctrl) { G.top = att; G.bot = def; G.d = -G.d; }
+      await step(pair('drive', 260));
+      const land = r.margin < 8 ? 'guard' : r.margin < 20 ? 'side' : 'mount';
+      enterGround(land, 300);
+      await step(sleep(300));
+      G.shake = 8; rumble(0.8, 200);
+      hurt(def, 'body', 4, att);
+      log(att.name + ' trips ' + def.name + ' into ' + FD.pairs[land].label.toLowerCase(), r.detail);
+      banner('Trip', att.name + ' lands in ' + FD.pairs[land].label.toLowerCase());
+    } else {
+      log(def.name + ' stays up and ' + (ctrl ? 'takes the tie' : 'keeps the tie'), r.detail);
+      if (ctrl) { G.top = def; G.bot = att; G.d = -G.d; }
+      G.lastAction = G.now;
+      await step(pair('clinch', 420));
+    }
+  });
+}
+function breakAway(f) {
+  act(async () => {
+    if (f === G.top) { log(f.name + ' lets go of the clinch'); return backToFeet(500); }
+    const o = other(f);
+    const r = await contest({ att: f, def: o, attStat: (st(f).clinch + st(f).defense) / 2, defStat: st(o).clinch, attTitle: 'Break free!', defTitle: 'Hold the clinch!' });
+    if (r.margin > 0) { log(f.name + ' breaks free', r.detail); return backToFeet(500); }
+    log(o.name + ' holds the clinch', r.detail);
+    G.lastAction = G.now;
+    await step(pair('clinch', 300, { top: 'pummel', bot: 'pummel' }));
+    await step(pair('clinch', 300));
+  });
+}
+function cpuClinch() {
+  if (G.mode !== 'clinch' || G.busy || G.over || G.timing || G.sub) return;
+  const cpu = F.blue;
+  if (G.now < (cpu.nextThink || 0)) return;
+  const s = st(cpu), lv = LEVELS[G.level], r = Math.random();
+  cpu.nextThink = G.now + rand(700, 1300) / lv.aggr;
+  if (cpu === G.top) {
+    if (r < 0.5) clinchStrike(cpu, 'knee');
+    else if (r < 0.75) clinchStrike(cpu, 'elbow');
+    else if (r < 0.75 + s.takedowns / 600) trip(cpu);
+    else if (r > 0.96 - (G.now - G.clinchSince) / 40000) breakAway(cpu);
+  } else {
+    if (r < 0.2 + s.clinch / 300) pummel(cpu);
+    else if (r < 0.62) breakAway(cpu);
+    else if (r < 0.82) clinchStrike(cpu, 'knee');
+    else clinchStrike(cpu, 'elbow');
+  }
+}
+
 // ---------- CPU on the ground ----------
 function cpuGround() {
   if (G.mode !== 'ground' || G.busy || G.over || G.timing || G.sub) return;
@@ -899,6 +1024,12 @@ function finish(winner, loser, how, detail) {
   G.over = true;
   hideTell();
   $('timing').hidden = true; $('sub').hidden = true; G.timing = null; G.sub = null;
+  if (G.mode === 'clinch') {
+    const a = F.red.shown.P.x, b = F.blue.shown.P.x, left = a <= b ? F.red : F.blue;
+    left.x = Math.min(a, b) - 15; other(left).x = Math.max(a, b) + 15;
+    for (const f of [F.red, F.blue]) face(f);
+    G.mode = 'stand'; G.top = G.bot = null;
+  }
   if (G.mode === 'stand') {
     loser.action = { type: 'down' }; stand(loser, 'ko', 1100);
     winner.action = { type: 'done' }; stand(winner, 'stance', 300);
@@ -950,7 +1081,7 @@ function decision() {
 // ---------- Referee ----------
 function moveRef(pose) { REF.pose = pose; stand(REF, pose, 500); }
 function updateRef(rdt) {
-  const mid = G.mode === 'ground' || G.mode === 'grapple' ? G.anchor : (F.red.x + F.blue.x) / 2;
+  const mid = G.mode === 'ground' || G.mode === 'grapple' || G.mode === 'clinch' ? G.anchor : (F.red.x + F.blue.x) / 2;
   const side = mid > 120 ? -1 : 1;
   const tx = mid + side * (G.over ? 80 : 195), tz = G.over ? -30 : -120;
   const k = 1 - Math.pow(0.08, rdt / 1000);
@@ -973,7 +1104,17 @@ function command(cmd) {
   }
   if (G.over || G.timing || G.sub || G.mode === 'break') return;
   const [kind, arg] = cmd.split(':');
+  if (G.mode === 'clinch') {
+    if (kind === 'cblock') return clinchBlock(arg);
+    if (G.busy) return;
+    if (kind === 'knee' || kind === 'elbow') clinchStrike(me, kind);
+    else if (kind === 'pummel') pummel(me);
+    else if (kind === 'trip') trip(me);
+    else if (kind === 'breakaway') breakAway(me);
+    return;
+  }
   if (G.mode === 'stand') {
+    if (kind === 'clinch') { if (me.action.type === 'idle') enterClinch(me); return; }
     if (kind === 'strike') {
       if (me.action.type === 'idle') startStrike(me, arg, G.now - (me.action.since || 0) < 250);
       else if (me.action.type === 'strike' && me.action.phase !== 'wind') me.queued = { kind: 'strike', key: arg, at: G.now };
@@ -995,7 +1136,7 @@ function command(cmd) {
   else if (kind === 'submit' && canSubmit(me)) submit();
   else if (kind === 'getup') standUp(me);
 }
-const KEYMAP = { j: 'strike:jab', k: 'strike:cross', u: 'strike:lead_hook', i: 'strike:rear_hook', l: 'strike:low_kick', o: 'strike:body_kick', p: 'strike:head_kick',
+const KEYMAP = { j: 'strike:jab', k: 'strike:cross', u: 'strike:lead_hook', i: 'strike:rear_hook', y: 'strike:uppercut', l: 'strike:low_kick', o: 'strike:body_kick', p: 'strike:head_kick',
   arrowleft: 'step:-1', arrowright: 'step:1', g: 'shoot', h: 'submit', r: 'getup' };
 addEventListener('keydown', e => {
   if (e.target.closest('select') || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -1004,11 +1145,17 @@ addEventListener('keydown', e => {
   if (e.repeat) return;
   held.add(k);
   setDevice('keyboard');
+  if (k === ' ' && G.mode === 'clinch' && !G.timing && !G.sub) return command('cblock:' + (held.has('w') ? 'high' : 'body'));
   if (k === ' ') {
     if (G.timing || G.sub) return command('time');
     return G.mode === 'ground' ? command('block') : command('block:' + heldZone());
   }
   if (k === 'f' && G.mode === 'stand') return command('evade:' + heldEvade());
+  if (G.mode === 'clinch') {
+    const ck = { ' ': 'cblock:' + (held.has('w') ? 'high' : 'body'), j: 'elbow', k: 'elbow', u: 'elbow', i: 'elbow', l: 'knee', o: 'knee', g: 'trip', c: 'pummel', r: 'breakaway' }[k];
+    return ck && command(ck);
+  }
+  if (k === 'c') return command('clinch');
   if (G.mode === 'ground') {
     if (k === 'j' || k === 'k') return command('punch');
     if (k === 'g') return command(G.top === human() ? 'advance' : 'sweep');
@@ -1041,9 +1188,9 @@ function pollPad() {
     const r1 = on(BTN.r1);
     if (down(BTN.square)) command(r1 ? 'strike:lead_hook' : 'strike:jab');
     if (down(BTN.triangle)) command(r1 ? 'strike:rear_hook' : 'strike:cross');
-    if (down(BTN.cross)) command('strike:low_kick');
+    if (down(BTN.cross)) command(r1 ? 'strike:uppercut' : 'strike:low_kick');
     if (down(BTN.circle)) command(r1 ? 'strike:head_kick' : 'strike:body_kick');
-    if (down(BTN.l2)) command('shoot');
+    if (down(BTN.l2)) command(r1 ? 'clinch' : 'shoot');
     const rx = gp.axes[2] || 0, ry = gp.axes[3] || 0, rp = G.rstickPrev || {};
     const rs = { left: rx < -0.6, right: rx > 0.6, up: ry < -0.6, down: ry > 0.6 };
     for (const [dir, kind] of [['left', 'slip_left'], ['right', 'slip_right'], ['down', 'duck'], ['up', 'sway']]) if (rs[dir] && !rp[dir]) command('evade:' + kind);
@@ -1054,6 +1201,13 @@ function pollPad() {
       if (stick.left && !sp.left) command('step:-1');
       if (stick.right && !sp.right) command('step:1');
     }
+  } else if (G.mode === 'clinch') {
+    if (down(BTN.l1)) command('cblock:' + (stick.up ? 'high' : 'body'));
+    if (down(BTN.square) || down(BTN.triangle)) command('elbow');
+    if (down(BTN.cross) || down(BTN.circle)) command('knee');
+    if (down(BTN.l2)) command('trip');
+    if (down(BTN.r1)) command('pummel');
+    if (down(BTN.r2)) command('breakaway');
   } else if (G.mode === 'ground') {
     if (down(BTN.l1)) command('block');
     if (down(BTN.square) || down(BTN.triangle)) command('punch');
@@ -1074,8 +1228,8 @@ addEventListener('gamepaddisconnected', () => { G.pad = null; setDevice('keyboar
 // ---------- Device-aware labels ----------
 let device = 'keyboard';
 const LABELS = {
-  keyboard: { time: 'Space', block: 'Space', jab: 'J', cross: 'K', lead_hook: 'U', rear_hook: 'I', low_kick: 'L', body_kick: 'O', head_kick: 'P', shoot: 'G', punch: 'J', advance: 'G', sweep: 'G', submit: 'H', getup: 'R', back: '\u2190', fwd: '\u2192', evade: 'F' },
-  pad: { time: '\u2715', block: 'L1', jab: '\u25a1', cross: '\u25b3', lead_hook: 'R1+\u25a1', rear_hook: 'R1+\u25b3', low_kick: '\u2715', body_kick: '\u25cb', head_kick: 'R1+\u25cb', shoot: 'L2', punch: '\u25a1', advance: 'L2', sweep: 'L2', submit: '\u25cb', getup: 'R2', back: 'Stick \u2190', fwd: 'Stick \u2192', evade: 'R stick' }
+  keyboard: { time: 'Space', block: 'Space', jab: 'J', cross: 'K', lead_hook: 'U', rear_hook: 'I', low_kick: 'L', body_kick: 'O', head_kick: 'P', shoot: 'G', punch: 'J', advance: 'G', sweep: 'G', submit: 'H', getup: 'R', back: '\u2190', fwd: '\u2192', evade: 'F', blockhigh: 'W+Space', uppercut: 'Y', clinch: 'C', knee: 'L', elbow: 'J', trip: 'G', pummel: 'C', breakaway: 'R' },
+  pad: { time: '\u2715', block: 'L1', jab: '\u25a1', cross: '\u25b3', lead_hook: 'R1+\u25a1', rear_hook: 'R1+\u25b3', low_kick: '\u2715', body_kick: '\u25cb', head_kick: 'R1+\u25cb', shoot: 'L2', punch: '\u25a1', advance: 'L2', sweep: 'L2', submit: '\u25cb', getup: 'R2', back: 'Stick \u2190', fwd: 'Stick \u2192', evade: 'R stick', blockhigh: 'L1+up', uppercut: 'R1+\u2715', clinch: 'R1+L2', knee: '\u2715', elbow: '\u25a1', trip: 'L2', pummel: 'R1', breakaway: 'R2' }
 };
 const keyName = k => LABELS[device === 'pad' ? 'pad' : 'keyboard'][k];
 function setDevice(kind, id) {
@@ -1141,12 +1295,21 @@ const ACTIONS = [
   { ctx: 'stand', cmd: 'strike:cross', text: 'Cross', key: 'cross' },
   { ctx: 'stand', cmd: 'strike:lead_hook', text: 'Lead hook', key: 'lead_hook' },
   { ctx: 'stand', cmd: 'strike:rear_hook', text: 'Rear hook', key: 'rear_hook' },
+  { ctx: 'stand', cmd: 'strike:uppercut', text: 'Uppercut', key: 'uppercut' },
   { ctx: 'stand', cmd: 'strike:low_kick', text: 'Low kick', key: 'low_kick' },
   { ctx: 'stand', cmd: 'strike:body_kick', text: 'Body kick', key: 'body_kick' },
   { ctx: 'stand', cmd: 'strike:head_kick', text: 'Head kick', key: 'head_kick' },
   { ctx: 'stand', cmd: 'shoot', text: 'Shoot takedown', key: 'shoot' },
+  { ctx: 'stand', cmd: 'clinch', text: 'Clinch', key: 'clinch' },
   { ctx: 'stand', cmd: 'step:-1', text: 'Step left', key: 'back' },
   { ctx: 'stand', cmd: 'step:1', text: 'Step right', key: 'fwd' },
+  { ctx: 'clinch', cmd: 'knee', text: 'Knee', key: 'knee' },
+  { ctx: 'clinch', cmd: 'elbow', text: 'Elbow', key: 'elbow' },
+  { ctx: 'clinch', cmd: 'cblock:body', text: 'Block knee', key: 'block' },
+  { ctx: 'clinch', cmd: 'cblock:high', text: 'Block elbow', key: 'blockhigh' },
+  { ctx: 'clinch', cmd: 'pummel', text: 'Pummel for the tie', key: 'pummel' },
+  { ctx: 'clinch', cmd: 'trip', text: 'Trip', key: 'trip' },
+  { ctx: 'clinch', cmd: 'breakaway', text: 'Break away', key: 'breakaway' },
   { ctx: 'top', cmd: 'punch', text: 'Ground and pound', key: 'punch' },
   { ctx: 'top', cmd: 'advance', text: 'Pass / advance', key: 'advance' },
   { ctx: 'top', cmd: 'submit', text: 'Armbar', key: 'submit' },
@@ -1170,10 +1333,12 @@ function buildActions() {
   }
 }
 function updateUI() {
-  const me = human(), ctx = G.timing || G.sub ? 'time' : G.mode === 'stand' ? 'stand' : G.mode === 'ground' ? (G.top === me ? 'top' : 'bot') : 'none';
+  const me = human(), ctx = G.timing || G.sub ? 'time' : G.mode === 'stand' ? 'stand' : G.mode === 'clinch' ? 'clinch' : G.mode === 'ground' ? (G.top === me ? 'top' : 'bot') : 'none';
   document.querySelectorAll('#actions button').forEach(b => {
     b.hidden = b.dataset.ctx !== ctx;
-    if (b.dataset.cmd === 'advance') b.disabled = !NEXT[G.pos] || G.busy;
+    if (b.dataset.cmd === 'pummel') { b.hidden = b.hidden || G.top === me; b.disabled = G.busy; }
+    else if (b.dataset.cmd.startsWith('cblock')) b.disabled = G.over;
+    else if (b.dataset.cmd === 'advance') b.disabled = !NEXT[G.pos] || G.busy;
     else if (b.dataset.cmd === 'submit') { b.hidden = b.hidden || !canSubmit(me); b.disabled = G.busy; }
     else if (b.dataset.cmd === 'sweep') { b.querySelector('span').textContent = G.pos === 'side' ? 'Escape to guard' : SWEEP[G.pos]?.name || 'Sweep'; b.disabled = G.busy; }
     else b.disabled = G.over || (ctx !== 'stand' && ctx !== 'time' && G.busy && b.dataset.cmd !== 'block');
@@ -1181,12 +1346,13 @@ function updateUI() {
   });
   $('block-group').hidden = ctx !== 'stand';
   $('evade-group').hidden = ctx !== 'stand';
-  $('pos').textContent = G.mode === 'ground' ? FD.pairs[G.pos].label + ' \u00b7 ' + G.top.name + ' on top' : G.mode === 'grapple' ? 'Scramble' : G.mode === 'break' ? 'Between rounds' : 'Standing';
+  $('pos').textContent = G.mode === 'clinch' ? 'Clinch \u00b7 ' + G.top.name + ' has the tie' : G.mode === 'ground' ? FD.pairs[G.pos].label + ' \u00b7 ' + G.top.name + ' on top' : G.mode === 'grapple' ? 'Scramble' : G.mode === 'break' ? 'Between rounds' : 'Standing';
   let msg;
   if (G.over) msg = 'Fight over. Restart to go again.';
   else if (G.timing) msg = G.timing.title + ' Press ' + keyName('time') + ' when the needle is in the green.';
   else if (G.sub) msg = 'Mash ' + keyName('time') + (G.sub.att === me ? ' to finish it.' : ' to escape.');
-  else if (G.mode === 'stand') msg = 'Strike, block with ' + keyName('block') + (device === 'pad' ? ' + stick' : ' + W/A/S/D') + ', slip or duck with ' + keyName('evade') + (device === 'pad' ? '' : ' + W/A/S/D') + ', or shoot a takedown with ' + keyName('shoot') + '.';
+  else if (G.mode === 'stand') msg = 'Strike, block with ' + keyName('block') + (device === 'pad' ? ' + stick' : ' + W/A/S/D') + ', slip or duck with ' + keyName('evade') + (device === 'pad' ? '' : ' + W/A/S/D') + ', clinch with ' + keyName('clinch') + ' or shoot with ' + keyName('shoot') + '.';
+  else if (G.mode === 'clinch') msg = (G.top === me ? 'You have the tie: knees and elbows hit hardest, trips are easier. ' : 'They have the tie: pummel to take it, block their knees and elbows, or break away. ') + 'Knee ' + keyName('knee') + ', elbow ' + keyName('elbow') + ', trip ' + keyName('trip') + ', break ' + keyName('breakaway') + '.';
   else if (G.mode === 'ground' && G.top === me) msg = 'On top in ' + FD.pairs[G.pos].label.toLowerCase() + '. Punch, pass, ' + (canSubmit(me) ? 'armbar, ' : '') + 'or stand up.';
   else if (G.mode === 'ground') msg = 'On the bottom in ' + FD.pairs[G.pos].label.toLowerCase() + '. Block (' + keyName('block') + ') when they cock a punch, sweep, ' + (canSubmit(me) ? 'triangle, ' : '') + 'or get up.';
   else msg = '';
@@ -1195,11 +1361,13 @@ function updateUI() {
 function buildControlsTable() {
   const L = LABELS[device === 'pad' ? 'pad' : 'keyboard'], kb = device !== 'pad';
   const rows = [
-    ['Jab / cross', L.jab + ' / ' + L.cross], ['Lead hook / rear hook', L.lead_hook + ' / ' + L.rear_hook],
+    ['Jab / cross', L.jab + ' / ' + L.cross], ['Lead hook / rear hook', L.lead_hook + ' / ' + L.rear_hook], ['Uppercut', L.uppercut],
     ['Low / body / head kick', L.low_kick + ' / ' + L.body_kick + ' / ' + L.head_kick],
     ['Block', kb ? 'Space + W high, A left, D right, S check (Space alone: body)' : 'L1 + stick up high, left, right, down check (L1 alone: body)'],
     ['Head movement', kb ? 'F + W sway back, A slip left, D slip right, S duck (F alone: duck)' : 'Flick right stick: up sway back, left or right slip, down duck. Or R2 + left stick'],
     ['Move', kb ? '\u2190 / \u2192' : 'Left stick or d-pad'], ['Shoot takedown', L.shoot],
+    ['Clinch (close range)', L.clinch],
+    ['In the clinch', kb ? 'L knee, J elbow, C pummel, G trip, R break away, Space block knee, W+Space block elbow' : '\u2715 knee, \u25a1 elbow, R1 pummel, L2 trip, R2 break away, L1 block knee, L1+up block elbow'],
     ['Timing bar / mash', L.time], ['Ground and pound (top)', L.punch], ['Pass (top) / sweep (bottom)', L.advance],
     ['Submission', L.submit], ['Stand up / get up', L.getup], ['Block on the ground', L.block]
   ];
@@ -1283,6 +1451,12 @@ function frame(real) {
   if (G.mode === 'stand') {
     cpuStand(F.blue); cpuDefend(F.blue);
     for (const f of [F.red, F.blue]) updateStriker(f, dt);
+  } else if (G.mode === 'clinch') {
+    cpuClinch();
+    if (!G.busy && !G.over && (G.now - G.lastAction > 9000 || G.now - G.clinchSince > 15000)) {
+      G.lastAction = G.now;
+      act(async () => { banner('Break', 'The referee breaks the clinch'); log('Referee breaks the clinch'); moveRef('ref_stop'); await step(sleep(400)); await backToFeet(500); });
+    }
   } else if (G.mode === 'ground') {
     cpuGround();
     if (!G.busy && !G.over && G.now - G.lastAction > 15000) {
@@ -1319,17 +1493,17 @@ function frame(real) {
 }
 
 // Debug hooks for tests. __standPose('duck', 'rhook_hit', 70): Red holds a pose while Blue's strike aims where Red's stance head was.
-window.__standPose = (redPose, bluePose, dist) => {
+window.__standPose = (redPose, bluePose, dist, strikeKey) => {
   gen++; G.over = true; G.mode = 'stand';
   F.red.x = -dist / 2; F.blue.x = dist / 2;
   for (const f of [F.red, F.blue]) { face(f); f.moveDur = 0; f.action = { type: 'done' }; f.shown = null; }
   primeBodies();
   for (const f of [F.red, F.blue]) { stand(f, 'stance', 0); f.shown = animState(f); f.bodyJoints = bodyJoints(f.shown); }
-  F.blue.action = { type: 'strike', aim: Object.fromEntries(Object.entries(F.red.bodyJoints).map(([k, v]) => [k, v.clone()])) };
+  F.blue.action = { type: 'strike', s: SD.strikes[strikeKey] || {}, aim: Object.fromEntries(Object.entries(F.red.bodyJoints).map(([k, v]) => [k, v.clone()])) };
   stand(F.red, redPose, 0); stand(F.blue, bluePose, 0);
 };
 // Debug hooks for tests.
-window.__fight = () => ({ mode: G.mode, pos: G.pos, top: G.top?.name, round: G.round, over: G.over, busy: G.busy, timing: !!G.timing, sub: !!G.sub,
+window.__fight = () => ({ tie: G.mode === 'clinch' ? G.top.name : null, mode: G.mode, pos: G.pos, top: G.top?.name, round: G.round, over: G.over, busy: G.busy, timing: !!G.timing, sub: !!G.sub,
   red: { head: Math.round(F.red.headHP), sta: Math.round(F.red.sta), act: F.red.action.type }, blue: { head: Math.round(F.blue.headHP), sta: Math.round(F.blue.sta), act: F.blue.action.type } });
 window.__pairPose = (name, topColor, ov, subU) => {
   gen++; G.busy = true;

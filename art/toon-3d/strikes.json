@@ -1,5 +1,5 @@
 {
-  "notes": "Poses are changes on top of 'stance', in the fighter's own facing frame: x is the fighter's left, y is up, z is forward toward the opponent. pelvis {b} is measured from the fighter's spot on the mat. Feet {h} are points on the mat around that spot, so they stay planted when the hips move. Hands {hc} are offsets from the fighter's own upper chest. {j: 'opp.head', o: [...]} aims at the opponent's body, offset in the opponent's facing frame (their x is their left), so a strike reaches the target when in range and extends short of it when not. Both fighters stand orthodox (left foot forward). A strike's 'zone' is the side of the defender it threatens, from the defender's point of view. 'evade' maps head movement to a damage multiplier: 0 dodges it, 0.5 takes half, above 1 means moving into it; head movement not listed has no effect.",
+  "notes": "Poses are changes on top of 'stance', in the fighter's own facing frame: x is the fighter's left, y is up, z is forward toward the opponent. pelvis {b} is measured from the fighter's spot on the mat. Feet {h} are points on the mat around that spot, so they stay planted when the hips move. Hands {hc} are offsets from the fighter's own upper chest. {j: 'opp.head', o: [...]} aims at the opponent's body, offset in the opponent's facing frame (their x is their left), so a strike reaches the target when in range and extends short of it when not. Both fighters stand orthodox (left foot forward). A strike's 'zone' is the side of the defender it threatens, from the defender's point of view. 'evade' maps head movement to a damage multiplier: 0 dodges it, 0.5 takes half, above 1 means moving into it; head movement not listed has no effect. 'track' strikes follow the target's head instead of aiming where it was (an uppercut finds a ducking head).",
   "poses": {
     "stance":        { "pelvis": { "b": [0, 92, 0] }, "rot": [0, 0, 0], "spine": [10, -30, 0], "head": [-6, 26, 0],
                        "lh": { "hc": [5, 13, 24] }, "rh": { "hc": [-7, 11, 13] }, "lf": { "h": [9, 7, 22] }, "rf": { "h": [-12, 7, -20] } },
@@ -13,6 +13,8 @@
     "lhook_hit":     { "rot": [0, -10, 0], "spine": [10, 15, 0], "head": [-6, -5, 0], "lh": { "j": "opp.head", "o": [-11, 0, 3] }, "lhp": [1, 0.3, 0] },
     "rhook_wind":    { "spine": [10, -5, 0], "head": [-6, 5, 0], "rh": { "hc": [-17, 12, 8] } },
     "rhook_hit":     { "rot": [0, 20, 0], "spine": [10, 25, 0], "head": [-6, -40, 0], "rh": { "j": "opp.head", "o": [11, 0, 3] }, "rhp": [-1, 0.3, 0], "lh": { "hc": [5, 13, 12] } },
+    "upper_wind":    { "pelvis": { "b": [0, 86, 0] }, "spine": [14, -10, 0], "head": [-6, 12, 0], "rh": { "hc": [-6, -6, 10] } },
+    "upper_hit":     { "pelvis": { "b": [0, 93, 6] }, "rot": [0, 15, 0], "spine": [6, 22, 0], "head": [-8, -28, 0], "rh": { "j": "opp.head", "o": [0, -6, 9] }, "rhp": [-0.3, -1, 0.2], "lh": { "hc": [5, 13, 12] } },
     "lowkick_wind":  { "pelvis": { "b": [0, 91, 2] }, "rot": [0, 20, 0], "spine": [6, -30, 0], "rf": { "h": [-14, 18, -8] } },
     "lowkick_hit":   { "pelvis": { "b": [0, 92, 4] }, "rot": [0, 60, -12], "spine": [0, -40, 8], "head": [-4, -10, 0], "rf": { "j": "opp.lhip", "o": [10, -38, 8] }, "rfp": [-0.3, 0.4, 1], "rh": { "hc": [-16, -18, -10] }, "lh": { "hc": [6, 14, 20] } },
     "bodykick_wind": { "rot": [0, 25, 0], "rf": { "h": [-12, 30, -4] }, "rfp": [0, 0.5, 1], "rh": { "hc": [-14, 0, 0] } },
@@ -48,6 +50,7 @@
     "cross":     { "label": "Cross",     "key": "k", "wind": "cross_wind",    "hit": "cross_hit",    "windup": 360, "recover": 280, "dmg": 9,  "part": "head", "zone": "high",  "cost": 7,  "range": [40, 100], "evade": { "slip_left": 0, "slip_right": 0, "duck": 0, "sway": 0 } },
     "lead_hook": { "label": "Lead hook", "key": "u", "wind": "lhook_wind",    "hit": "lhook_hit",    "windup": 380, "recover": 300, "dmg": 10, "part": "head", "zone": "right", "cost": 8,  "range": [35, 85], "evade": { "duck": 0, "sway": 0.5, "slip_right": 1.3 } },
     "rear_hook": { "label": "Rear hook", "key": "i", "wind": "rhook_wind",    "hit": "rhook_hit",    "windup": 430, "recover": 330, "dmg": 12, "part": "head", "zone": "left",  "cost": 9,  "range": [35, 85], "evade": { "duck": 0, "sway": 0.5, "slip_left": 1.3 } },
+    "uppercut":  { "label": "Uppercut",  "key": "y", "wind": "upper_wind",    "hit": "upper_hit",    "windup": 400, "recover": 300, "dmg": 11, "part": "head", "zone": "high",  "cost": 7,  "range": [30, 75], "track": true, "evade": { "slip_left": 0, "slip_right": 0, "sway": 0, "duck": 1.4 } },
     "low_kick":  { "label": "Low kick",  "key": "l", "wind": "lowkick_wind",  "hit": "lowkick_hit",  "windup": 420, "recover": 360, "dmg": 11, "part": "legs", "zone": "low",   "cost": 9,  "range": [60, 115], "kick": true, "evade": {} },
     "body_kick": { "label": "Body kick", "key": "o", "wind": "bodykick_wind", "hit": "bodykick_hit", "windup": 520, "recover": 420, "dmg": 12, "part": "body", "zone": "body",  "cost": 12, "range": [70, 125], "kick": true, "evade": { "duck": 1.3, "sway": 0.5 } },
     "head_kick": { "label": "Head kick", "key": "p", "wind": "headkick_wind", "hit": "headkick_hit", "windup": 640, "recover": 520, "dmg": 22, "part": "head", "zone": "left",  "cost": 16, "range": [75, 125], "kick": true, "evade": { "duck": 0, "sway": 0, "slip_left": 1.3 } }
@@ -66,17 +69,17 @@
     "sway":       { "label": "Sway back",  "short": "sway back", "arrow": "\u2191", "key": "W" }
   },
   "styles": {
-    "boxing":    { "label": "Boxing", "evasion": 88, "takedowns": 20, "td_defense": 55, "top": 35, "guard": 25,    "power": 80, "speed": 88, "defense": 82, "chin": 75, "cardio": 78, "kicks": 15, "range": 78,  "aggression": 1.1,
-                   "mix": { "jab": 5, "cross": 4, "lead_hook": 4, "rear_hook": 3 } },
-    "muay_thai": { "label": "Muay Thai", "evasion": 55, "takedowns": 35, "td_defense": 65, "top": 45, "guard": 35, "power": 80, "speed": 70, "defense": 76, "chin": 78, "cardio": 86, "kicks": 92, "range": 100, "aggression": 1.0,
-                   "mix": { "jab": 2, "cross": 2, "lead_hook": 1, "rear_hook": 1, "low_kick": 4, "body_kick": 4, "head_kick": 2 } },
-    "karate":    { "label": "Karate", "evasion": 72, "takedowns": 30, "td_defense": 55, "top": 40, "guard": 35,    "power": 66, "speed": 92, "defense": 76, "chin": 66, "cardio": 76, "kicks": 82, "range": 112, "aggression": 0.8,
+    "boxing":    { "label": "Boxing", "clinch": 55, "evasion": 88, "takedowns": 20, "td_defense": 55, "top": 35, "guard": 25,    "power": 80, "speed": 88, "defense": 82, "chin": 75, "cardio": 78, "kicks": 15, "range": 78,  "aggression": 1.1,
+                   "mix": { "uppercut": 3, "jab": 5, "cross": 4, "lead_hook": 4, "rear_hook": 3 } },
+    "muay_thai": { "label": "Muay Thai", "clinch": 92, "evasion": 55, "takedowns": 35, "td_defense": 65, "top": 45, "guard": 35, "power": 80, "speed": 70, "defense": 76, "chin": 78, "cardio": 86, "kicks": 92, "range": 100, "aggression": 1.0,
+                   "mix": { "uppercut": 1, "jab": 2, "cross": 2, "lead_hook": 1, "rear_hook": 1, "low_kick": 4, "body_kick": 4, "head_kick": 2 } },
+    "karate":    { "label": "Karate", "clinch": 40, "evasion": 72, "takedowns": 30, "td_defense": 55, "top": 40, "guard": 35,    "power": 66, "speed": 92, "defense": 76, "chin": 66, "cardio": 76, "kicks": 82, "range": 112, "aggression": 0.8,
                    "mix": { "jab": 4, "cross": 3, "lead_hook": 0.5, "rear_hook": 0.5, "low_kick": 1, "body_kick": 2, "head_kick": 3 } },
-    "mma":       { "label": "MMA", "evasion": 66, "takedowns": 70, "td_defense": 70, "top": 70, "guard": 65,       "power": 72, "speed": 74, "defense": 70, "chin": 72, "cardio": 74, "kicks": 66, "range": 95,  "aggression": 1.0,
-                   "mix": { "jab": 3, "cross": 3, "lead_hook": 2, "rear_hook": 2, "low_kick": 2, "body_kick": 2, "head_kick": 1 } },
-    "wrestling": { "label": "Wrestling", "evasion": 45, "takedowns": 90, "td_defense": 85, "top": 82, "guard": 40, "power": 64, "speed": 60, "defense": 56, "chin": 80, "cardio": 88, "kicks": 30, "range": 85,  "aggression": 0.9,
-                   "mix": { "jab": 2, "cross": 3, "lead_hook": 2, "rear_hook": 2, "low_kick": 1 } },
-    "bjj":       { "label": "BJJ", "evasion": 42, "takedowns": 55, "td_defense": 50, "top": 70, "guard": 92,       "power": 52, "speed": 56, "defense": 50, "chin": 66, "cardio": 72, "kicks": 40, "range": 95,  "aggression": 0.7,
+    "mma":       { "label": "MMA", "clinch": 70, "evasion": 66, "takedowns": 70, "td_defense": 70, "top": 70, "guard": 65,       "power": 72, "speed": 74, "defense": 70, "chin": 72, "cardio": 74, "kicks": 66, "range": 95,  "aggression": 1.0,
+                   "mix": { "uppercut": 1, "jab": 3, "cross": 3, "lead_hook": 2, "rear_hook": 2, "low_kick": 2, "body_kick": 2, "head_kick": 1 } },
+    "wrestling": { "label": "Wrestling", "clinch": 85, "evasion": 45, "takedowns": 90, "td_defense": 85, "top": 82, "guard": 40, "power": 64, "speed": 60, "defense": 56, "chin": 80, "cardio": 88, "kicks": 30, "range": 85,  "aggression": 0.9,
+                   "mix": { "uppercut": 1, "jab": 2, "cross": 3, "lead_hook": 2, "rear_hook": 2, "low_kick": 1 } },
+    "bjj":       { "label": "BJJ", "clinch": 60, "evasion": 42, "takedowns": 55, "td_defense": 50, "top": 70, "guard": 92,       "power": 52, "speed": 56, "defense": 50, "chin": 66, "cardio": 72, "kicks": 40, "range": 95,  "aggression": 0.7,
                    "mix": { "jab": 3, "cross": 1, "lead_hook": 1, "rear_hook": 1, "low_kick": 1, "body_kick": 1 } }
   }
 }
