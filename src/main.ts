@@ -4,9 +4,12 @@ import { Sound, type Ambience } from './audio/sound';
 import { VoiceDirector } from './audio/voice';
 import { makeNoise, playSfx, playUi, type Sfx, type UiSound } from './audio/synth';
 import { SD } from './data';
-import { Fight, type Color } from './fight/fight';
+import { Fight, type Color, type PopKind } from './fight/fight';
 import type { Level } from './fight/rules';
 import { Input, type Device } from './input/input';
+import { PadNav } from './input/padnav';
+import { Online } from './net/online';
+import type { NetEvent } from './net/protocol';
 import { loadProfile, recordFight, saveProfile, type Profile } from './profile/profile';
 import { ParkController } from './park/controller';
 import { PARK_FIGHTER_BY_ID } from './park/data';
@@ -30,7 +33,7 @@ const voiceLog: string[] = [];
 const voices = new VoiceDirector(id => { voiceLog.push(id); sound.voice(id); });
 // Browsers only start audio after the player interacts.
 for (const ev of ['pointerdown', 'keydown'] as const) addEventListener(ev, () => sound.unlock(), { capture: true, passive: true });
-type Screen = 'menu' | 'fight' | 'training' | 'park' | 'pickup' | 'story' | 'bout';
+type Screen = 'menu' | 'fight' | 'training' | 'park' | 'pickup' | 'story' | 'bout' | 'versus' | 'watch' | 'online';
 let screen: Screen = 'menu';
 /** The park fighter for the current or next pickup fight. */
 let pickupId = '';
@@ -65,23 +68,96 @@ function setLook() {
 let hud: Hud;
 let input: Input;
 let training: TrainingController;
+let online: Online;
+const r1 = (n: number) => Math.round(n * 10) / 10;
+/** Everything the fight shows also goes to a guest's page when hosting a room. */
+const net: Online['record'] = body => online?.record(body);
 const fight = new Fight(meshes, {
-  pop: (at, text, kind) => hud.pop(at, text, kind),
-  banner: (text, sub, ms) => hud.banner(text, sub, ms),
-  log: (text, detail) => hud.log(text, detail),
+  pop: (at, text, kind) => { hud.pop(at, text, kind); net(['p', r1(at.x), r1(at.y), r1(at.z), text.slice(0, 40), kind]); },
+  banner: (text, sub, ms) => { hud.banner(text, sub, ms); net(['n', text.slice(0, 60), sub?.slice(0, 120) ?? null, ms ?? null]); },
+  log: (text, detail) => { hud.log(text, detail); net(['l', text.slice(0, 100), detail?.slice(0, 140) ?? null]); },
   tell: s => hud.tell(s),
-  rumble: (strength, ms) => input.rumble(strength, ms),
+  rumble: (strength, ms, to) => { input.rumble(strength, ms, to); net(['r', strength, ms, to ?? null]); },
   key: name => input.key(name),
   changed: () => hud.refresh(),
   ended: onEnded,
   event: e => { if (screen === 'training') training.onEvent(e); voices.event(e, performance.now()); },
-  sfx: e => { sfxCounts[e.k] = (sfxCounts[e.k] || 0) + 1; sound.play(e); voices.cue(e, performance.now()); },
-  impact: (at, power, kind) => hud.burst(at, power, kind)
+  sfx: e => { sfxCounts[e.k] = (sfxCounts[e.k] || 0) + 1; sound.play(e); voices.cue(e, performance.now()); net(['s', e]); },
+  impact: (at, power, kind) => { hud.burst(at, power, kind); net(['i', r1(at.x), r1(at.y), r1(at.z), r1(power), kind]); }
 });
-const FIGHTING: Screen[] = ['fight', 'training', 'pickup', 'bout'];
-input = new Input(fight, { active: () => FIGHTING.includes(screen), deviceChanged, restart });
+const FIGHTING: Screen[] = ['fight', 'training', 'pickup', 'bout', 'versus', 'watch', 'online'];
+/**
+ * Which side each device plays. One player: everything is red. Two players on one screen: the keyboard is red, and with
+ * one controller it is blue; with two, the first is red and the second blue. CPU vs CPU: nobody. Online: your side.
+ */
+function seat(dev: 'keyboard' | number, pads: number): Color | null {
+  if (screen === 'watch') return null;
+  if (screen === 'online') return online.role === 'host' ? 'red' : online.playing ? 'blue' : null;
+  if (screen === 'versus') return dev === 'keyboard' ? 'red' : pads >= 2 && dev === 0 ? 'red' : 'blue';
+  return 'red';
+}
+input = new Input(fight, { active: () => FIGHTING.includes(screen), deviceChanged, restart, seat, back: () => { location.hash = $<HTMLAnchorElement>('back').getAttribute('href') || '#'; } });
 hud = new Hud(fight, input, stage.camera);
 const camera = new GameCamera(stage.camera, stage.panels);
+const localSink = input.sink;
+online = new Online(fight, {
+  startFight(opp) {
+    hud.clearLog(); hud.clearBanner(); input.resetHeld(); resetVoices();
+    fight.tells = false;
+    fight.start({
+      redStyle: profile.style, blueStyle: opp?.style ?? profile.opponentStyle, level: 'normal', redName: profile.name,
+      blueName: opp?.name ?? 'Waiting…', control: { red: 'human', blue: 'human' }, config: opp ? {} : { noClock: true }
+    });
+    if (opp) hud.banner(opp.name + ' joined', `${profile.name} vs ${opp.name}`, 1800);
+    setOnlineLabel();
+  },
+  status(text, sub) { if (text) hud.banner(text, sub, 0); else hud.clearBanner(); setOnlineLabel(); },
+  play: playNet,
+  changed() {
+    hud.me = online.playing ? 'blue' : 'red';
+    hud.note = online.role === 'guest' && !online.playing ? 'Watching. The host is fighting someone else.' : null;
+    setOnlineLabel();
+    hud.refresh();
+  },
+  me: () => ({ name: profile.name, style: profile.style })
+});
+function setOnlineLabel() {
+  if (screen !== 'online') return;
+  const side = online.role === 'host' ? 'you are red' : online.playing ? 'you are blue' : 'watching';
+  $('screen-label').textContent = `Online \u00b7 room ${online.code} \u00b7 ${side}`;
+}
+/** On a guest's page: replay one of the host's events. The host's text is shown as text, never as markup. */
+function playNet(e: NetEvent) {
+  const num = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) ? n : 0);
+  const str = (v: unknown) => (typeof v === 'string' ? v : '');
+  try {
+    switch (e[1]) {
+      case 'p': hud.pop(V(num(e[2]), num(e[3]), num(e[4])), str(e[5]), (['hit', 'block', 'miss', 'gold'].includes(e[6]) ? e[6] : 'hit') as PopKind); break;
+      case 'n': hud.banner(str(e[2]), e[3] ? str(e[3]) : null, e[4] == null ? undefined : num(e[4])); break;
+      case 'l': hud.log(str(e[2]), e[3] ? str(e[3]) : undefined); break;
+      case 's': if (e[2] && typeof e[2].k === 'string') { sound.play(e[2]); voices.cue(e[2], performance.now()); } break;
+      case 'i': hud.burst(V(num(e[2]), num(e[3]), num(e[4])), Math.min(1, num(e[5])), e[6] === 'parry' ? 'parry' : e[6] === 'block' ? 'block' : 'hit'); break;
+      case 'r': if (online.playing) input.rumble(Math.min(1, num(e[2])), Math.min(1000, num(e[3])), e[4] === 'red' || e[4] === 'blue' ? e[4] : undefined); break;
+      case 'k': fight.kick = { dir: V(num(e[2]), num(e[3]), num(e[4])), amp: Math.min(12, num(e[5])), t0: performance.now() }; break;
+      case 'h': fight.shake = Math.max(fight.shake, Math.min(12, num(e[2]))); break;
+    }
+  } catch { /* a malformed event is skipped */ }
+}
+async function goOnline(how: 'host' | 'join') {
+  const status = $('online-status'), code = $<HTMLInputElement>('online-code').value.trim().toUpperCase();
+  if (how === 'join' && !/^[A-Z0-9]{4,6}$/.test(code)) { status.textContent = 'Enter the 4-letter code your friend sees.'; return; }
+  status.textContent = 'Connecting…';
+  const ok = how === 'host' ? await online.host() : await online.join(code);
+  if (!ok) {
+    status.textContent = 'Online play needs the game open on claude.ai, where rooms are available. Open the shared game there, or play two players on one screen.';
+    return;
+  }
+  status.textContent = '';
+  location.hash = '#online';
+}
+$('online-host').addEventListener('click', () => void goOnline('host'));
+$('online-join').addEventListener('click', () => void goOnline('join'));
+$('online-code').addEventListener('keydown', e => { if (e.key === 'Enter') void goOnline('join'); });
 const store = { get: () => profile, set: (p: Profile) => { profile = p; saveProfile(p); renderProfile(); } };
 training = new TrainingController(fight, input, hud, store);
 training.ui = (k, step) => sound.ui(k, step);
@@ -204,9 +280,9 @@ function onEnded(winner: Color | null, how: string) {
 
 function deviceChanged(kind: Device, id?: string) {
   $('device').classList.toggle('on', kind === 'pad');
-  $('device-text').textContent = kind === 'pad' ? `Controller connected${id && /dualsense|054c/i.test(id) ? ' (DualSense)' : ''}. Options restarts.`
+  $('device-text').textContent = kind === 'pad' ? `Controller connected${id && /dualsense|054c/i.test(id) ? ' (DualSense)' : ''}. Options restarts, Create goes back.`
     : kind === 'blocked' ? 'This view blocks controllers. Open the game in its own tab or run it locally to use one.'
-    : 'Keyboard. Connect a PS5 controller and press any button.';
+    : 'Keyboard. Connect a PS5 controller and press any button. In menus, the D-pad moves and ✕ selects.';
   hud.buildActions();
   hud.buildControlsTable();
   hud.refresh();
@@ -227,17 +303,26 @@ function restart() {
     hud.banner(o.name, `${profile.name} vs ${o.name} \u00b7 ${$('screen-label').textContent}`, 1800);
   }
   else if (screen === 'fight') startFight();
+  else if (screen === 'versus' || screen === 'watch') startFight();
+  else if (screen === 'online') online.rematch();
 }
 /** A new fight: the corner forgets the last one. It only talks in real fights, not in drills. */
 function resetVoices() {
   voices.reset(performance.now());
-  voices.corner = screen !== 'training';
+  voices.corner = screen === 'fight' || screen === 'pickup' || screen === 'bout';
 }
 function startFight() {
   hud.clearLog();
   hud.clearBanner();
+  input.resetHeld();
   fight.tells = profile.tells;
-  fight.start({ redStyle: profile.style, blueStyle: profile.opponentStyle, level: profile.level as Level, redName: profile.name });
+  const red = SD.styles[profile.style].label, blue = SD.styles[profile.opponentStyle].label;
+  if (screen === 'watch') fight.start({ redStyle: profile.style, blueStyle: profile.opponentStyle, level: profile.level as Level, redName: 'Red ' + red, blueName: 'Blue ' + blue, control: { red: 'cpu', blue: 'cpu' } });
+  else if (screen === 'versus') {
+    fight.start({ redStyle: profile.style, blueStyle: profile.opponentStyle, level: 'normal', redName: profile.name, blueName: 'Player 2', control: { red: 'human', blue: 'human' } });
+    hud.banner('Two players', input.padCount ? (input.padCount >= 2 ? 'Controller 1 is red, controller 2 is blue' : 'Keyboard is red, the controller is blue') : 'Player 2: connect a controller and press any button', 2600);
+  }
+  else fight.start({ redStyle: profile.style, blueStyle: profile.opponentStyle, level: profile.level as Level, redName: profile.name });
   $('red-style').textContent = SD.styles[profile.style].label;
   $('blue-style').textContent = SD.styles[profile.opponentStyle].label;
 }
@@ -247,14 +332,15 @@ function resize() {
   stage.camera.aspect = w / h;
   stage.camera.updateProjectionMatrix();
 }
-const SCREENS: Record<string, Screen> = { '#fight': 'fight', '#training': 'training', '#park': 'park', '#pickup': 'pickup', '#story': 'story', '#bout': 'bout' };
+const SCREENS: Record<string, Screen> = { '#versus': 'versus', '#watch': 'watch', '#online': 'online', '#fight': 'fight', '#training': 'training', '#park': 'park', '#pickup': 'pickup', '#story': 'story', '#bout': 'bout' };
 const LABELS: Record<Screen, string> = {
-  menu: '', story: '', fight: 'Fight night \u00b7 3 rounds', training: 'Training', park: 'The park', pickup: 'Pickup fight \u00b7 1 round', bout: ''
+  menu: '', story: '', fight: 'Fight night \u00b7 3 rounds', versus: 'Two players \u00b7 3 rounds', watch: 'CPU vs CPU \u00b7 3 rounds', online: 'Online', training: 'Training', park: 'The park', pickup: 'Pickup fight \u00b7 1 round', bout: ''
 };
 function route() {
   let next: Screen = SCREENS[location.hash] || 'menu';
   if (next === 'pickup' && !PARK_FIGHTER_BY_ID[pickupId]) { location.replace('#park'); next = 'park'; }
   if (next === 'bout' && screen !== 'story' && screen !== 'bout') { location.replace('#story'); next = 'story'; }
+  if (next === 'online' && !online.active) { location.replace('#'); next = 'menu'; }
   if (next === screen && (next === 'menu' || next === 'story')) return;
   const prev = screen;
   if (next !== 'training' && next !== 'park' && next !== 'story') training.returnTo = null;
@@ -273,7 +359,13 @@ function route() {
   $<HTMLAnchorElement>('back').href = backTo ? '#' + backTo : '#';
   $('back').innerHTML = backTo === 'park' ? '&larr; Park' : backTo === 'story' ? '&larr; Camp' : '&larr; Menu';
   screen = next;
-  const AMBIENCE: Record<Screen, Ambience> = { menu: null, story: null, fight: 'arena', pickup: 'arena', bout: 'arena', training: 'gym', park: 'street' };
+  // Leaving an online fight leaves the room; every other screen plays as red on this page.
+  if (prev === 'online' && next !== 'online') online.leave();
+  input.sink = next === 'online' && online.role === 'guest' ? cmd => online.send(cmd) : localSink;
+  hud.me = 'red'; hud.note = next === 'watch' ? 'CPU vs CPU. Restart for a rematch; change the styles below.' : null;
+  $('restart').hidden = next === 'online' && online.role === 'guest';
+  $('actions').hidden = next === 'watch';
+  const AMBIENCE: Record<Screen, Ambience> = { versus: 'arena', watch: 'arena', online: 'arena', menu: null, story: null, fight: 'arena', pickup: 'arena', bout: 'arena', training: 'gym', park: 'street' };
   sound.setAmbience(AMBIENCE[next]);
   if (prev === 'park') { park.leave(); camera.snap(V(70, 128, 820), V(0, 102, 0), 17.5); }
   if (prev === 'pickup') park.endPickupScreen();
@@ -291,11 +383,24 @@ function route() {
     park.enter(from ? PLACES.find(p => p.id === from)!.x : undefined);
   } else if (screen === 'training') { resetVoices(); training.start(); }
   else if (screen === 'pickup' || screen === 'bout') restart();
+  else if (screen === 'online') {
+    if (online.role === 'guest') {
+      // The guest never runs the fight; a fresh one just gives the bodies a pose until the host's arrive.
+      hud.clearLog(); voices.reset(performance.now()); voices.corner = false;
+      fight.start({ redStyle: profile.opponentStyle, blueStyle: profile.style, level: 'normal', redName: 'Host', blueName: profile.name, control: { red: 'human', blue: 'human' }, config: { noClock: true } });
+      fight.animate();
+    }
+    online.begin();
+    setOnlineLabel();
+  }
   else { resetVoices(); startFight(); }
   window.scrollTo(0, 0);
 }
 addEventListener('hashchange', route);
 addEventListener('resize', resize);
+
+// The main menu with a controller; ○ there does nothing (it's the top).
+const menuNav = new PadNav(() => (screen === 'menu' ? $('menu') : null), () => {});
 
 // ---------- Frame loop ----------
 let last = performance.now();
@@ -303,15 +408,22 @@ function frame(real: number) {
   const rdt = Math.min(50, real - last);
   last = real;
   input.poll();
+  menuNav.poll(real);
   sound.frame(rdt);
   if (FIGHTING.includes(screen)) voices.frame({ mode: fight.mode, over: fight.over, bottom: fight.mode === 'ground' ? fight.bot?.color ?? null : null }, performance.now());
   if (screen === 'story') story.poll();
   if (screen === 'park') {
     park.frame(real, rdt);
     stage.renderer.render(stage.scene, stage.camera);
+  } else if (screen === 'online' && online.role === 'guest') {
+    online.guestFrame(real, rdt);
+    camera.update(fight, rdt);
+    hud.frame();
+    stage.renderer.render(stage.scene, stage.camera);
   } else if (FIGHTING.includes(screen)) {
     fight.update(real, rdt);
     fight.animate();
+    if (screen === 'online') online.hostFrame(real);
     camera.update(fight, rdt);
     hud.frame();
     if (screen === 'training') training.frame();

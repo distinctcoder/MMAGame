@@ -2,7 +2,7 @@
 import type * as THREE from 'three';
 import { FD, SD } from '../data';
 import type { EvadeKind, Strike, Zone } from '../data/types';
-import type { Fight, PopKind } from '../fight/fight';
+import type { Color, Fight, PopKind } from '../fight/fight';
 import { leanAmounts, NEXT, SWEEP } from '../fight/rules';
 import { LABELS, type Input } from '../input/input';
 import { clamp, type Vector3 } from '../rig/math';
@@ -57,6 +57,10 @@ const ACTIONS: { ctx: Ctx; cmd: string; text: string; key: string }[] = [
 export class Hud {
   private box = $('box');
   private bannerTimer = 0;
+  /** The side this screen plays (prompts, guard pads, the submission meter): red, or blue for a guest in a room. */
+  me: Color = 'red';
+  /** Replaces the controls prompt, e.g. while watching. */
+  note: string | null = null;
 
   constructor(private fight: Fight, private input: Input, private camera: THREE.PerspectiveCamera) {}
 
@@ -125,17 +129,17 @@ export class Hud {
     }
     const c = Math.max(0, Math.ceil(f.clock / 1000));
     $('clock').innerHTML = `<small>R${f.round}</small>${Math.floor(c / 60)}:${String(c % 60).padStart(2, '0')}`;
-    const me = f.red, lean = leanAmounts(me.lean);
+    const me = f[this.me], lean = leanAmounts(me.lean);
     this.renderFooting();
     document.querySelectorAll<HTMLElement>('#blockpad button').forEach(b => b.classList.toggle('active', f.mode === 'stand' && (me.guard[b.dataset.zone as Zone] || 0) > 0.5));
     document.querySelectorAll<HTMLElement>('#evadepad button').forEach(b => b.classList.toggle('active', f.mode === 'stand' && lean[b.dataset.kind as EvadeKind] > 0.5));
     $('timing').hidden = !f.timing;
     if (f.timing) $('timing-needle').style.left = (f.needlePos() * 100) + '%';
     $('sub').hidden = !f.sub;
-    if (f.sub) $('sub-fill').style.width = (f.sub.att === f.red ? f.sub.v : 100 - f.sub.v) + '%';
+    if (f.sub) $('sub-fill').style.width = (f.sub.att === me ? f.sub.v : 100 - f.sub.v) + '%';
     const tell = $('tell');
     if (!tell.hidden) {
-      const s = this.project(f.blue.bodyJoints.head), room = this.box.clientWidth - tell.offsetWidth - 6;
+      const s = this.project(f.other(me).bodyJoints.head), room = this.box.clientWidth - tell.offsetWidth - 6;
       tell.style.left = clamp(s.x + 34, 6, room) + 'px'; tell.style.top = Math.max(s.y, 70) + 'px';
     }
   }
@@ -146,11 +150,11 @@ export class Hud {
     if (f.timing || f.sub) return 'time';
     if (f.mode === 'stand') return 'stand';
     if (f.mode === 'clinch') return 'clinch';
-    if (f.mode === 'ground') return f.top === f.human() ? 'top' : 'bot';
+    if (f.mode === 'ground') return f.top === f[this.me] ? 'top' : 'bot';
     return 'none';
   }
   refresh() {
-    const f = this.fight, me = f.human(), ctx = this.ctx(), key = (k: string) => this.input.key(k);
+    const f = this.fight, me = f[this.me], ctx = this.ctx(), key = (k: string) => this.input.key(k);
     const subLabel = f.subName() ? FD.subs[f.subName()!].label : 'Submit';
     document.querySelectorAll<HTMLButtonElement>('#actions button').forEach(b => {
       const cmd = b.dataset.cmd!;
@@ -191,7 +195,7 @@ export class Hud {
       + `Knee ${key('knee')}, elbow ${key('elbow')}, trip ${key('trip')}, break ${key('breakaway')}.`;
     else if (f.mode === 'ground' && f.top === me) msg = `On top in ${posLabel.toLowerCase()}. Punch, pass, ${f.canSubmit(me) ? subLabel.toLowerCase() + ', ' : ''}or stand up.`;
     else if (f.mode === 'ground') msg = `On the bottom in ${posLabel.toLowerCase()}. Block (${key('block')}) when they cock a punch, sweep, ${f.canSubmit(me) ? subLabel.toLowerCase() + ', ' : ''}or get up.`;
-    $('prompt').textContent = msg;
+    $('prompt').textContent = this.note ?? msg;
   }
 
   // ---------- Built once (and again when the input device changes) ----------
@@ -204,8 +208,8 @@ export class Hud {
       const span = document.createElement('span'), kbd = document.createElement('kbd');
       span.textContent = a.text; kbd.textContent = this.input.key(a.key);
       b.append(span, ' ', kbd);
-      b.addEventListener('pointerdown', e => { e.preventDefault(); this.fight.command(a.cmd); });
-      b.addEventListener('keydown', e => { if (e.key === 'Enter') this.fight.command(a.cmd); });
+      b.addEventListener('pointerdown', e => { e.preventDefault(); this.input.command(a.cmd); });
+      b.addEventListener('keydown', e => { if (e.key === 'Enter') this.input.command(a.cmd); });
       row.appendChild(b);
     }
   }
@@ -216,7 +220,7 @@ export class Hud {
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'b-' + zone; b.dataset.zone = zone;
       b.textContent = `${z.arrow} ${z.label}`; b.title = 'Blocks ' + z.covers;
-      b.addEventListener('pointerdown', e => { e.preventDefault(); this.fight.command('block:' + zone); });
+      b.addEventListener('pointerdown', e => { e.preventDefault(); this.input.command('block:' + zone); });
       blockpad.appendChild(b);
     }
     for (const [kind, e] of Object.entries(SD.evades) as [EvadeKind, typeof SD.evades[EvadeKind]][]) {
@@ -224,7 +228,7 @@ export class Hud {
       b.type = 'button'; b.className = 'e-' + kind; b.dataset.kind = kind;
       b.textContent = `${e.arrow} ${e.label}`;
       b.title = 'Dodges ' + Object.values(SD.strikes).filter(s => s.evade?.[kind] === 0).map(s => s.label.toLowerCase()).join(', ');
-      b.addEventListener('pointerdown', ev => { ev.preventDefault(); this.fight.command('evade:' + kind); });
+      b.addEventListener('pointerdown', ev => { ev.preventDefault(); this.input.command('evade:' + kind); });
       evadepad.appendChild(b);
     }
   }
@@ -243,7 +247,7 @@ export class Hud {
   /** The footing chips under your meters: range, angles, lead foot, planted. */
   private footingHtml = '';
   private renderFooting() {
-    const f = this.fight, me = f.red, o = f.blue, chips: [string, string][] = [];
+    const f = this.fight, me = f[this.me], o = f.other(me), chips: [string, string][] = [];
     if (f.mode === 'stand' && !f.over) {
       const d = f.gap(), jab = SD.strikes.jab, hook = SD.strikes.lead_hook;
       if (d > jab.range[1]) chips.push(['Out of range', '']);
@@ -273,7 +277,7 @@ export class Hud {
       ['Timing bar / mash', L.time], ['Ground and pound (top)', L.punch], ['Pass (top) / sweep (bottom)', L.advance],
       ['Submission', L.submit], ['Stand up / get up', L.getup], ['Block on the ground', L.block]
     ];
-    if (!kb) rows.push(['Restart', 'Options']);
+    if (!kb) rows.push(['Restart', 'Options'], ['Back to the menu', 'Create']);
     if (kb) rows.push(['Mute sound', 'M']);
     $('controls').innerHTML = `<thead><tr><th>Move</th><th>${kb ? 'Keyboard' : 'PS5 controller'}</th></tr></thead><tbody>`
       + rows.map(r => `<tr><td>${r[0]}</td><td><kbd>${r[1]}</kbd></td></tr>`).join('') + '</tbody>';

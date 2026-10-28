@@ -41,7 +41,30 @@
         <span class="mode-text">From amateur night to a five-round title fight, with a fight camp before every bout and a rival who won't go away.</span>
         <span class="mode-tag" id="story-tag">Play</span>
       </a>
+      <a class="mode" href="#versus" id="go-versus">
+        <span class="mode-name">Two players</span>
+        <span class="mode-text">Same screen. Player 1 on the keyboard or the first controller, player 2 on a controller.</span>
+        <span class="mode-tag">Play</span>
+      </a>
+      <a class="mode" href="#watch" id="go-watch">
+        <span class="mode-name">CPU vs CPU</span>
+        <span class="mode-text">Sit back and watch the two styles below fight it out.</span>
+        <span class="mode-tag">Watch</span>
+      </a>
     </div>
+
+    <section class="online" aria-labelledby="online-h">
+      <h2 id="online-h">Play a friend online</h2>
+      <p class="muted">Host a room and send your friend the code. They open this game, enter the code and join. You fight as red; they fight as blue with their own name and style. Anyone else who joins watches.</p>
+      <div class="online-row">
+        <button type="button" class="btn" id="online-host">Host a room</button>
+        <span class="muted">or</span>
+        <label class="label" for="online-code">Code</label>
+        <input id="online-code" maxlength="6" autocomplete="off" spellcheck="false" placeholder="ABCD">
+        <button type="button" class="btn" id="online-join">Join</button>
+      </div>
+      <p class="small" id="online-status" role="status"></p>
+    </section>
 
     <section class="profile">
       <h2>Your fighter</h2>

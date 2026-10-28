@@ -12,6 +12,8 @@ import type { Sfx } from '../audio/synth';
 import { cpuClinch, cpuDefend, cpuGround, cpuSeesWindup, cpuStand } from './cpu';
 
 export type Color = 'red' | 'blue';
+/** Who drives a fighter: a person (local keys, a controller, or a player in a room) or the CPU. */
+export type Control = 'human' | 'cpu';
 export type Mode = 'stand' | 'grapple' | 'clinch' | 'ground' | 'break';
 export type PopKind = 'hit' | 'block' | 'miss' | 'gold';
 
@@ -33,7 +35,7 @@ export type Action =
 interface Queued { kind: 'strike' | 'shoot'; key?: string; at: number }
 export interface Plan { at: number; zone?: Zone; evade?: EvadeKind }
 interface Anim { from: RigState | null; fn: () => RigState; t0: number; dur: number }
-interface Animated { shown: RigState | null; anim: Anim | null }
+interface Animated { shown: RigState | null; anim: Anim | null; /** The pose as last drawn, weight included. */ drawn?: RigState | null }
 
 export interface Fighter extends Animated {
   color: Color; name: string; style: string; mesh: FighterMesh;
@@ -57,10 +59,12 @@ export interface Fighter extends Animated {
   counterUntil: number; counterMul: number;
   dealt: number; roundDealt: number;
   bodyJoints: Joints; nextThink: number; plannedBlock: Plan | null; clinchUntil: number;
+  /** The last block pressed in the clinch or on the ground (real ms) and its zone. */
+  blockAt: number; blockZone: Zone | null;
 }
 export interface Referee extends Animated { x: number; z: number; yaw: number; mesh: FighterMesh }
 
-export interface Timing { title: string; width: number; center: number; start: number; period: number; resolve: (q: number) => void }
+export interface Timing { owner: Color; title: string; width: number; center: number; start: number; period: number; resolve: (q: number) => void }
 export interface SubState {
   att: Fighter; def: Fighter; attStat: number; defStat: number; name: string; v: number;
   start: number; last: number; acc: { att: number; def: number }; resolve: (r: 'tap' | 'escape') => void;
@@ -71,7 +75,8 @@ export interface FightEvents {
   banner(text: string, sub?: string | null, ms?: number): void;
   log(text: string, detail?: string): void;
   tell(s: Strike | null): void;
-  rumble(strength: number, ms: number): void;
+  /** Shake the controller of `to`, or every controller. */
+  rumble(strength: number, ms: number, to?: Color): void;
   /** Control label for prompts, e.g. key('block') -> 'Space' or 'L1'. */
   key(name: string): string;
   /** The set of available moves changed; refresh contextual controls. */
@@ -110,6 +115,8 @@ export interface FightSetup {
   redStyle: string; blueStyle: string; level: R.Level; redName?: string; blueName?: string; config?: FightConfig;
   /** Stat points added to each fighter's style, e.g. from park training and gear. */
   redBoost?: R.Boost; blueBoost?: R.Boost;
+  /** Who drives each side (default: red human, blue CPU). */
+  control?: Partial<Record<Color, Control>>;
 }
 
 /** Structured events for scoring (training drills, stats). */
@@ -145,10 +152,11 @@ export class Fight {
   kick: { dir: Vector3; amp: number; t0: number } | null = null;
   top: Fighter | null = null; bot: Fighter | null = null; anchor = 0; d = 1; pos: Position | null = null; pairName = '';
   subV = 0; timing: Timing | null = null; sub: SubState | null = null;
-  lastAction = 0; blockAt = -1e9; blockZone: Zone | null = null; clinchSince = 0; nextShoot = 0;
+  lastAction = 0; clinchSince = 0; nextShoot = 0;
   camOverride: { pos: Vector3; look: Vector3; fov: number } | null = null;
   koCam: Fighter | null = null;
   config: FightConfig = {};
+  control: Record<Color, Control> = { red: 'human', blue: 'cpu' };
   nextAttack = 0;
   private gen = 0;
 
@@ -158,7 +166,7 @@ export class Fight {
       stepKind: null, stepEnd: 0, turnSince: 0, guard: {}, guardTarget: null, guardSince: 0, lean: { x: 0, y: 0 }, leanTarget: { x: 0, y: 0 }, holdUntil: 0, jolt: null,
       headMax: 100, headHP: 100, body: 0, legs: 0, sta: 100, action: { type: 'idle', since: 0 }, queued: null,
       counterUntil: 0, counterMul: R.PARRY_COUNTER, dealt: 0, roundDealt: 0, shown: null, anim: null,
-      bodyJoints: blankJoints(), nextThink: 0, plannedBlock: null, clinchUntil: 0
+      bodyJoints: blankJoints(), nextThink: 0, plannedBlock: null, clinchUntil: 0, blockAt: -1e9, blockZone: null
     });
     this.red = fighter('red', 'Red');
     this.blue = fighter('blue', 'Blue');
@@ -170,8 +178,9 @@ export class Fight {
   style(f: Fighter): Style { return f.stats; }
   private rounds() { return this.config.rounds ?? R.ROUNDS; }
   private roundMs() { return this.config.roundMs ?? R.ROUND_MS; }
-  isHuman(f: Fighter) { return f === this.red; }
-  human() { return this.red; }
+  isHuman(f: Fighter) { return this.control[f.color] === 'human'; }
+  /** The CPU-driven fighters. */
+  cpus() { return [this.red, this.blue].filter(f => !this.isHuman(f)); }
   roleOf(f: Fighter): Role { return f === this.top ? 'top' : 'bot'; }
   rand(a: number, b: number) { return a + this.rng() * (b - a); }
   private sleep(ms: number) { return new Promise<void>(r => setTimeout(r, ms)); }
@@ -188,6 +197,7 @@ export class Fight {
     this.red.stats = R.withBoost(SD.styles[setup.redStyle], setup.redBoost);
     this.blue.stats = R.withBoost(SD.styles[setup.blueStyle], setup.blueBoost);
     this.config = setup.config || {};
+    this.control = { red: 'human', blue: 'cpu', ...setup.control };
     this.nextAttack = this.now + 1200;
     this.red.name = setup.redName || 'Red';
     this.blue.name = setup.blueName || 'Blue';
@@ -208,7 +218,7 @@ export class Fight {
     Object.assign(f, { x, z: 0, fromX: x, toX: x, fromZ: 0, toZ: 0, moveDur: 0, stepKind: null, stepEnd: 0, turnSince: 0,
       guard: {}, guardTarget: null, guardSince: 0, lean: { x: 0, y: 0 }, leanTarget: { x: 0, y: 0 }, holdUntil: 0, jolt: null, headMax: R.headMax(this.style(f)), body: 0, legs: 0, sta: 100,
       action: { type: 'idle', since: 0 }, clinchUntil: 0, queued: null, counterUntil: 0, dealt: 0, roundDealt: 0,
-      shown: null, anim: null, nextThink: 0, plannedBlock: null });
+      shown: null, anim: null, nextThink: 0, plannedBlock: null, blockAt: -1e9, blockZone: null });
     f.headHP = f.headMax;
   }
   /** Turn straight to the opponent (resets, round starts). */
@@ -328,8 +338,18 @@ export class Fight {
       f.shown = this.animState(f);
       // Weight is drawn on top and never fed back into the animation, so transitions start from the clean pose.
       const drawn = 'color' in f ? this.addWeight(f as Fighter, f.shown) : f.shown;
+      f.drawn = drawn;
       (f as Fighter | Referee).mesh.update(drawn);
       if ('color' in f) (f as Fighter).bodyJoints = bodyJoints(drawn);
+    }
+  }
+
+  /** Draw poses from elsewhere (a guest showing the host's fight), easing toward them by k (1 snaps). */
+  showPoses(target: Record<Color | 'ref', RigState>, k: number) {
+    for (const [f, t] of [[this.red, target.red], [this.blue, target.blue], [this.ref, target.ref]] as [Fighter | Referee, RigState][]) {
+      f.shown = f.shown && k < 1 ? blendState(f.shown, t, k) : t;
+      f.mesh.update(f.shown);
+      if ('color' in f) f.bodyJoints = bodyJoints(f.shown);
     }
   }
 
@@ -353,10 +373,10 @@ export class Fight {
       }
     }
     if (this.mode === 'stand') {
-      cpuStand(this, this.blue); cpuDefend(this, this.blue);
+      for (const f of this.cpus()) { cpuStand(this, f); cpuDefend(this, f); }
       for (const f of [this.red, this.blue]) { this.updateStriker(f); this.updateFacing(f, dt); this.updateDefense(f, dt); }
     } else if (this.mode === 'clinch') {
-      cpuClinch(this);
+      for (const f of this.cpus()) cpuClinch(this, f);
       if (!this.busy && !this.over && (this.now - this.lastAction > 9000 || this.now - this.clinchSince > 15000)) {
         this.lastAction = this.now;
         this.act(async () => {
@@ -366,7 +386,7 @@ export class Fight {
         });
       }
     } else if (this.mode === 'ground') {
-      cpuGround(this);
+      for (const f of this.cpus()) cpuGround(this, f);
       if (!this.busy && !this.over && this.now - this.lastAction > 15000) {
         this.lastAction = this.now;
         this.act(async () => {
@@ -397,7 +417,7 @@ export class Fight {
     f.action = { type: 'strike', key, s, phase: 'wind', tHit: this.now + windup, counter, counterMul, gassed, aim, attErr, t0: this.now, recoverMul: 1, tRecover: 0, tEnd: 0 };
     this.stand(f, s.wind, Math.max(80, windup - 70));
     cpuSeesWindup(this, this.other(f), f, s, windup);
-    if (!this.isHuman(f) && this.tells) this.ev.tell(s);
+    if (!this.isHuman(f) && this.isHuman(this.other(f)) && this.tells) this.ev.tell(s);
     this.lastAction = this.now;
     this.ev.event?.({ type: 'throw', attacker: f.color, key });
   }
@@ -577,7 +597,7 @@ export class Fight {
       this.hurt(def, s.part, dmg, att);
       if (out.mult >= 0.5) {
         this.stun(def, s.zone, dmg);
-        this.ev.rumble(this.isHuman(def) ? 1 : 0.35, this.isHuman(def) ? 220 : 90);
+        this.ev.rumble(1, 220, def.color); this.ev.rumble(0.35, 90, att.color);
         // Name what footwork did, so it is learnable: angle, outside foot, planted.
         const why = foot.tags.find(t => t === 'Angle' || t === 'Outside foot' || t === 'Planted');
         if (!tag) tag = [(out.result === 'into' ? 'Into it! ' : a.counter ? 'Counter ' : why ? why + '! ' : '') + Math.round(dmg), a.counter || why ? 'gold' : 'hit'];
@@ -631,10 +651,12 @@ export class Fight {
   }
 
   // ---------- Contests (timing bar) ----------
-  private timingBar(title: string, stat: number) {
+  private timingBar(owner: Fighter, title: string, stat: number) {
     return new Promise<number>(resolve => {
       const width = R.timingWidth(stat), center = this.rand(0.3 + width / 2, 0.8 - width / 2);
-      this.timing = { title, width, center, start: performance.now(), period: 1000, resolve };
+      // With two people playing, say whose bar it is.
+      if (this.isHuman(this.other(owner))) title = `${owner.name}: ${title}`;
+      this.timing = { owner: owner.color, title, width, center, start: performance.now(), period: 1000, resolve };
       this.ev.changed();
     });
   }
@@ -644,9 +666,10 @@ export class Fight {
     const u = ((real - t.start) / t.period) % 2;
     return u < 1 ? u : 2 - u;
   }
-  pressTiming() {
+  /** Stop the needle. Only the bar's owner can; a remote player sends where they saw the needle. */
+  pressTiming(who?: Color, needle?: number) {
     const t = this.timing;
-    if (t) this.endTiming(R.timingQuality(this.needlePos(), t.center, t.width));
+    if (t && (!who || t.owner === who)) this.endTiming(R.timingQuality(needle ?? this.needlePos(), t.center, t.width));
   }
   private endTiming(q: number) {
     const t = this.timing;
@@ -660,8 +683,8 @@ export class Fight {
   private async contest(o: { att: Fighter; def: Fighter; attStat: number; defStat: number; attTitle: string; defTitle: string; defBonus?: number }) {
     const lv = R.LEVELS[this.level].grap;
     const aStat = o.attStat + (this.isHuman(o.att) ? 0 : lv), dStat = o.defStat + (this.isHuman(o.def) ? 0 : lv);
-    const qa = this.isHuman(o.att) ? await this.step(this.timingBar(o.attTitle, o.attStat)) : R.cpuTiming(aStat, this.rng());
-    const qd = this.isHuman(o.def) ? await this.step(this.timingBar(o.defTitle, o.defStat)) : R.cpuTiming(dStat, this.rng());
+    const qa = this.isHuman(o.att) ? await this.step(this.timingBar(o.att, o.attTitle, o.attStat)) : R.cpuTiming(aStat, this.rng());
+    const qd = this.isHuman(o.def) ? await this.step(this.timingBar(o.def, o.defTitle, o.defStat)) : R.cpuTiming(dStat, this.rng());
     const margin = R.contestMargin(aStat, qa, dStat, qd, o.defBonus || 0, this.rng(), this.rng());
     const pct = (q: number) => Math.round(q * 100) + '%';
     return { margin, detail: `${o.att.name} ${Math.round(aStat)} + timing ${pct(qa)} vs ${o.def.name} ${Math.round(dStat)} + timing ${pct(qd)}, margin ${margin >= 0 ? '+' : ''}${Math.round(margin)}` };
@@ -778,7 +801,7 @@ export class Fight {
       void this.roleAnim(att, 'top_cock', this.isHuman(att) ? 170 : 300);
       if (cpuBlocks) void this.roleAnim(def, 'bot_block', 180);
       await this.step(this.sleep(this.isHuman(att) ? 170 : 340));
-      const blocked = cpuDef ? cpuBlocks : performance.now() - this.blockAt < 520;
+      const blocked = cpuDef ? cpuBlocks : performance.now() - def.blockAt < 520;
       await this.step(this.roleAnim(att, 'top_punch', 100));
       const at = def.bodyJoints.head;
       if (blocked) { this.ev.pop(at, 'Blocked', 'block'); this.ev.sfx?.({ k: 'block' }); this.weigh(att, def, 'head', 'blocked', 1, at); this.hurt(def, 'head', 1, att); }
@@ -787,7 +810,7 @@ export class Fight {
         this.ev.sfx?.({ k: 'hit', part: 'head', dmg });
         this.ev.pop(at, String(Math.round(dmg)), 'hit');
         this.weigh(att, def, 'head', 'hit', dmg, at);
-        this.ev.rumble(this.isHuman(def) ? 0.9 : 0.3, 140);
+        this.ev.rumble(0.9, 140, def.color); this.ev.rumble(0.3, 140, att.color);
         void this.roleAnim(def, 'bot_hit', 90);
         this.hurt(def, 'head', dmg, att);
       }
@@ -797,12 +820,11 @@ export class Fight {
       await this.step(this.roleAnim(def, null, 300));
     });
   }
-  groundBlock() {
-    if (this.mode !== 'ground' || this.bot !== this.human() || this.over) return;
-    this.blockAt = performance.now();
-    void this.roleAnim(this.bot, 'bot_block', 120);
-    const at = this.blockAt;
-    setTimeout(() => { if (this.blockAt === at && !this.busy && this.mode === 'ground') void this.roleAnim(this.bot!, null, 260); }, 600);
+  groundBlock(me: Fighter) {
+    if (this.mode !== 'ground' || this.bot !== me || this.over) return;
+    const at = me.blockAt = performance.now();
+    void this.roleAnim(me, 'bot_block', 120);
+    setTimeout(() => { if (me.blockAt === at && !this.busy && this.mode === 'ground' && this.bot === me) void this.roleAnim(me, null, 260); }, 600);
   }
   advance() {
     const to = this.pos && R.NEXT[this.pos];
@@ -926,7 +948,7 @@ export class Fight {
       void this.roleAnim(att, kind + '_cock', this.isHuman(att) ? 160 : 280);
       if (cpuBlocks) void this.roleAnim(def, 'block' + zone, 160);
       await this.step(this.sleep(this.isHuman(att) ? 170 : 320));
-      const blocked = cpuDef ? cpuBlocks : performance.now() - this.blockAt < 520 && this.blockZone === zone;
+      const blocked = cpuDef ? cpuBlocks : performance.now() - def.blockAt < 520 && def.blockZone === zone;
       att.sta = Math.max(0, att.sta - (kind === 'knee' ? 6 : 5));
       await this.step(this.roleAnim(att, kind, 100));
       const at = def.bodyJoints[kind === 'knee' ? 'abd' : 'head'];
@@ -936,7 +958,7 @@ export class Fight {
         this.ev.sfx?.({ k: 'hit', part: kind === 'knee' ? 'body' : 'head', dmg });
         this.ev.pop(at, String(Math.round(dmg)), 'hit');
         this.weigh(att, def, kind === 'knee' ? 'body' : 'head', 'hit', dmg, at);
-        this.ev.rumble(this.isHuman(def) ? 0.9 : 0.3, 160);
+        this.ev.rumble(0.9, 160, def.color); this.ev.rumble(0.3, 160, att.color);
         void this.roleAnim(def, kind === 'knee' ? 'hitbody' : 'hithead', 90);
         this.hurt(def, kind === 'knee' ? 'body' : 'head', dmg, att);
       }
@@ -946,12 +968,11 @@ export class Fight {
       await this.step(this.roleAnim(def, null, 280));
     });
   }
-  clinchBlock(zone: Zone) {
+  clinchBlock(me: Fighter, zone: Zone) {
     if (this.mode !== 'clinch' || this.over) return;
-    this.blockAt = performance.now(); this.blockZone = zone;
-    const me = this.human(), at = this.blockAt;
+    const at = me.blockAt = performance.now(); me.blockZone = zone;
     void this.roleAnim(me, 'block' + zone, 110);
-    setTimeout(() => { if (this.blockAt === at && !this.busy && this.mode === 'clinch') void this.roleAnim(me, null, 240); }, 600);
+    setTimeout(() => { if (me.blockAt === at && !this.busy && this.mode === 'clinch') void this.roleAnim(me, null, 240); }, 600);
   }
   pummel(att: Fighter) {
     if (att === this.top) return;
@@ -1107,17 +1128,20 @@ export class Fight {
   // ---------- Commands from any input device ----------
   // strike:<key>, block:<zone> and evade:<kind> (taps), guard:<zone|off> and lean:<x,y> (held), step:<screen dir>,
   // side:<+1 toward camera | -1 away>, move:<screen x>,<side>, shoot, clinch, knee, elbow, cblock:<zone>, pummel, trip,
-  // breakaway, punch, block, advance, sweep, pass (advance or sweep), submit, getup, time.
-  command(cmd: string) {
-    const me = this.human();
-    if (cmd === 'time') {
-      if (this.timing) return this.pressTiming();
+  // breakaway, punch, block, advance, sweep, pass (advance or sweep), submit, getup, time (time@<needle> from a remote player).
+  // `who` is the side the command is for; it is ignored unless a person drives that side.
+  command(cmd: string, who: Color = 'red') {
+    const me = this[who];
+    if (!this.isHuman(me)) return;
+    if (cmd === 'time' || cmd.startsWith('time@')) {
+      if (this.timing) return this.pressTiming(who, cmd.length > 5 ? clamp(Number(cmd.slice(5)) || 0, 0, 1) : undefined);
       if (this.sub) return this.subTap(this.sub.att === me ? 'att' : 'def');
+      return;
     }
     if (this.over || this.timing || this.sub || this.mode === 'break') return;
     const [kind, arg] = cmd.split(':');
     if (this.mode === 'clinch') {
-      if (kind === 'cblock') return this.clinchBlock(arg as Zone);
+      if (kind === 'cblock') return this.clinchBlock(me, arg as Zone);
       if (this.busy) return;
       if (kind === 'knee' || kind === 'elbow') this.clinchStrike(me, kind);
       else if (kind === 'pummel') this.pummel(me);
@@ -1143,7 +1167,7 @@ export class Fight {
       return;
     }
     if (this.mode !== 'ground') return;
-    if (kind === 'block') return this.groundBlock();
+    if (kind === 'block') return this.groundBlock(me);
     if (this.busy) return;
     const top = this.top === me;
     if (kind === 'pass') return top ? this.advance() : this.sweep();

@@ -1,6 +1,6 @@
 # 2DMMAGame
 
-A browser MMA game with toon-shaded 3D fighters that read as 2D art, with a quick fight mode, training, a park hub and a story career: striking with zone blocks and head movement, the clinch, three-phase takedowns, a ground game with sweeps and submissions, a referee, and three-round fights. Plays with keyboard, touch, or a PS5 DualSense.
+A browser MMA game with toon-shaded 3D fighters that read as 2D art, with a quick fight mode, training, a park hub, a story career, two players on one screen, CPU vs CPU and online play with a friend: striking with zone blocks and head movement, the clinch, three-phase takedowns, a ground game with sweeps and submissions, a referee, and three-round fights. Plays with keyboard, touch, or a PS5 DualSense.
 
 ## Getting started
 
@@ -28,7 +28,10 @@ src/rig/poses.ts        turns pose specs into world-space poses (standing and pa
 src/fight/rules.ts      pure fight rules: blocks, dodges, damage, timing, contests, judging
 src/fight/fight.ts      the fight state machine: standing, clinch, takedowns, ground, rounds, referee
 src/fight/cpu.ts        CPU opponent
-src/input/input.ts      keyboard and gamepad mapped to fight commands, rumble, control labels
+src/input/input.ts      keyboard and gamepads mapped to fight commands for each side (seats), rumble, control labels
+src/input/padnav.ts     moving around the main menu with a controller
+src/net/                online play: protocol.ts (pure: pose packing, snapshots, event and command rings), online.ts (host
+                        and guest over the artifact viewer's room capability)
 src/ui/hud.ts           HUD, prompts, contextual buttons, controls and defense charts
 src/ui/camera.ts        game camera
 src/training/            training mode: drills.ts (drill and partner definitions), session.ts (pure scoring),
@@ -40,10 +43,35 @@ src/story/               story mode: data.ts (chapters, bouts, opponents, dialog
 src/audio/               sound: synth.ts (every effect synthesized with Web Audio, no sample files), sound.ts (volume,
                         mute, crowd and street ambience)
 src/profile/profile.ts  your fighter (name, styles, record, best drill scores, park and story progress), saved in the browser
-tests/                  rules.test.ts (fight rules), data.test.ts (data integrity), training.test.ts (drill scoring and placement), park.test.ts and story.test.ts (progression)
+tests/                  rules.test.ts (fight rules), versus.test.ts (who drives each side), net.test.ts (online protocol), data.test.ts (data integrity), training.test.ts (drill scoring and placement), park.test.ts and story.test.ts (progression)
 ```
 
 The fight logic never touches the DOM. It reports what happened through the `FightEvents` interface (pops, banners, log lines, rumble), which the HUD and input modules implement. That keeps the rules testable and lets new screens, such as training mode, drive the same fight.
+
+## Who plays: two players, CPU vs CPU, online
+
+Each side of a fight is driven by a person or the CPU (`control` in `FightSetup`); `fight.command(cmd, side)` sends a
+command for one side and is ignored for a CPU side. Timing bars belong to one fighter, and in two-player fights they
+say whose they are.
+
+- **Two players** (same screen): player 1 uses the keyboard (and the touch buttons), player 2 a controller. With two
+  controllers, the first is red and the second blue.
+- **CPU vs CPU**: both sides use the CPU with the two styles from the menu; the controls are hidden.
+- **Online**: one player hosts a room and gets a four-letter code; the other enters it and joins. This uses the
+  artifact viewer's `room` capability, so it works when the game is open on claude.ai (published with
+  `capabilities: {room: {}}`), not from a plain local server. The host's page runs the fight and publishes it in its
+  room presence about 20 times a second: every body's pose packed into 46 integers, the meters, the clock, any timing
+  bar or submission, and the last second and a half of events (pops, banners, log lines, sounds, impacts). The guest's
+  page draws that, easing toward each new pose, and sends back its held controls (move, guard, lean) and numbered
+  commands that it repeats until the host acknowledges them. A guest presses timing bars against their own view of
+  the needle. Anyone else who joins watches. If the guest leaves, the CPU takes over blue.
+
+## Controllers
+
+A PS5 DualSense or any standard-mapping controller works everywhere: fights and drills (see the controls table in
+game), the park and story screens, and the main menu (D-pad or left stick to move, ✕ to select). In a fight, Options
+restarts and Create goes back. Some embedded views block the Gamepad API; the game says so and works on the
+keyboard, and opening it in its own tab restores the controller.
 
 ## Footwork and free-form defense
 

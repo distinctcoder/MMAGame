@@ -162,6 +162,10 @@
   .mode-text { color: var(--muted); }
   .mode-tag { justify-self: start; font: 500 11px/1 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; padding: 5px 7px; border-radius: 3px; border: 1px solid var(--line); color: var(--muted); }
   a.mode .mode-tag { background: var(--red); border-color: var(--red); color: var(--on-accent); }
+  .online { display: grid; gap: 10px; padding: 18px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+  .online h2, .online p { margin: 0; }
+  .online-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .online-row input { width: 96px; text-transform: uppercase; letter-spacing: 0.12em; font-family: var(--mono); }
   .profile { display: grid; gap: 14px; padding: 18px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
   .fields { display: flex; flex-wrap: wrap; gap: 14px 24px; }
   input { font: 600 14px/1 var(--body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; width: 180px; max-width: 100%; }

@@ -105,9 +105,8 @@ export function cpuDefend(fight: Fight, f: Fighter) {
   else if (p.zone) fight.holdGuard(f, p.zone, fight.rand(380, 520));
 }
 
-export function cpuClinch(fight: Fight) {
+export function cpuClinch(fight: Fight, cpu: Fighter) {
   if (fight.mode !== 'clinch' || fight.busy || fight.over || fight.timing || fight.sub || fight.config.cpu?.attack === false) return;
-  const cpu = fight.blue;
   if (fight.now < cpu.nextThink) return;
   const s = fight.style(cpu), lv = LEVELS[fight.level], r = fight.rng();
   cpu.nextThink = fight.now + fight.rand(700, 1300) / lv.aggr;
@@ -124,9 +123,9 @@ export function cpuClinch(fight: Fight) {
   }
 }
 
-export function cpuGround(fight: Fight) {
+export function cpuGround(fight: Fight, cpu: Fighter) {
   if (fight.mode !== 'ground' || fight.busy || fight.over || fight.timing || fight.sub || fight.config.cpu?.attack === false) return;
-  const cpu = fight.blue, me = fight.human();
+  const me = fight.other(cpu);
   if (fight.now < cpu.nextThink) return;
   const s = fight.style(cpu), lv = LEVELS[fight.level], r = fight.rng();
   if (cpu === fight.top) {
