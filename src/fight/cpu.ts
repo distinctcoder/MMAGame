@@ -1,7 +1,7 @@
 // CPU opponent: chooses strikes, steps, clinches and takedowns on the feet, reads incoming strikes, and works the ground.
 import { SD } from '../data';
 import type { EvadeKind, Strike, Zone } from '../data/types';
-import { clamp, LEVELS, NEXT } from './rules';
+import { clamp, inRange, LEVELS, NEXT } from './rules';
 import type { Fight, Fighter } from './fight';
 
 function weightedPick(f: Fight, mix: Record<string, number>, ok: (k: string) => boolean) {
@@ -16,33 +16,45 @@ declare global { interface Window { __passiveCpu?: boolean } }
 
 export function cpuStand(fight: Fight, f: Fighter) {
   if (fight.over || fight.mode !== 'stand' || f.action.type !== 'idle' || fight.now < f.nextThink || window.__passiveCpu) return;
+  const plan = fight.config.cpu || {};
   const s = fight.style(f), lv = LEVELS[fight.level], o = fight.other(f), dist = Math.abs(f.x - o.x);
   f.nextThink = fight.now + fight.rand(220, 520) / lv.aggr;
-  if (fight.now > fight.nextShoot && dist < 110 && f.sta > 20 && fight.rng() < s.takedowns / 100 * 0.16 * lv.aggr) {
+  if (plan.shootEvery) {
+    if (fight.now > fight.nextShoot && dist < 110) { fight.nextShoot = fight.now + plan.shootEvery; return fight.shoot(f); }
+  } else if (plan.takedowns !== false && plan.attack !== false && fight.now > fight.nextShoot && dist < 110 && f.sta > 20 && fight.rng() < s.takedowns / 100 * 0.16 * lv.aggr) {
     fight.nextShoot = fight.now + 4000;
     return fight.shoot(f);
   }
   // Clinch fighters sometimes decide to close the distance and tie up.
-  if (!f.clinchUntil && f.sta > 25 && fight.rng() < s.clinch / 100 * 0.07 * lv.aggr) f.clinchUntil = fight.now + 2500;
-  if (f.clinchUntil) {
-    if (fight.now > f.clinchUntil) f.clinchUntil = 0;
-    else if (dist <= 78) { f.clinchUntil = 0; return fight.enterClinch(f); }
-    else return fight.startStep(f, 1);
+  if (plan.clinch !== false && plan.attack !== false) {
+    if (!f.clinchUntil && f.sta > 25 && (plan.clinch === true || fight.rng() < s.clinch / 100 * 0.07 * lv.aggr)) f.clinchUntil = fight.now + 2500;
+    if (f.clinchUntil) {
+      if (fight.now > f.clinchUntil) f.clinchUntil = 0;
+      else if (dist <= 78) { f.clinchUntil = 0; return fight.enterClinch(f); }
+      else return fight.startStep(f, 1);
+    }
   }
-  if (dist > s.range + 18 && fight.rng() < 0.7) return fight.startStep(f, 1);
-  if (dist < s.range - 22 && fight.rng() < 0.45) return fight.startStep(f, -1);
-  if (fight.rng() > 0.65 * s.aggression * lv.aggr) return;
-  const key = weightedPick(fight, s.mix, k => {
-    const r = SD.strikes[k].range;
-    return dist >= r[0] - 4 && dist <= r[1] + 6 && f.sta >= SD.strikes[k].cost * 0.7;
+  const range = plan.keepRange ?? s.range;
+  if (plan.move !== false) {
+    if (dist > range + 18 && fight.rng() < 0.7) return fight.startStep(f, 1);
+    if (dist < range - 22 && fight.rng() < 0.45) return fight.startStep(f, -1);
+  }
+  if (plan.attack === false) return;
+  if (plan.interval ? fight.now < fight.nextAttack : fight.rng() > 0.65 * s.aggression * lv.aggr) return;
+  // Drill partners (steady interval) only throw what will reach; fight CPUs can misjudge range a little.
+  const key = weightedPick(fight, plan.mix || s.mix, k => {
+    const st = SD.strikes[k], r = st.range;
+    return plan.interval ? inRange(st, dist) : dist >= r[0] - 4 && dist <= r[1] + 6 && f.sta >= st.cost * 0.7;
   });
-  if (key) fight.startStrike(f, key, false);
-  else if (dist > s.range) fight.startStep(f, 1);
+  if (key) {
+    fight.startStrike(f, key, false);
+    if (plan.interval) fight.nextAttack = fight.now + fight.rand(plan.interval[0], plan.interval[1]);
+  } else if (dist > range && plan.move !== false) fight.startStep(f, 1);
 }
 
 /** The CPU sees a windup and, after a reaction delay, plans a block or head movement that it hopes is right. */
 export function cpuSeesWindup(fight: Fight, def: Fighter, att: Fighter, s: Strike, windup: number) {
-  if (fight.isHuman(def) || fight.over || att.action.type !== 'strike') return;
+  if (fight.isHuman(def) || fight.over || att.action.type !== 'strike' || fight.config.cpu?.defend === false) return;
   const lv = LEVELS[fight.level], st = fight.style(def), d = st.defense + lv.def, tHit = att.action.tHit;
   const delay = fight.rand(160, 380) * (1.25 - d / 200) * lv.react;
   if (delay > windup - 40) return;
@@ -69,7 +81,7 @@ export function cpuDefend(fight: Fight, f: Fighter) {
 }
 
 export function cpuClinch(fight: Fight) {
-  if (fight.mode !== 'clinch' || fight.busy || fight.over || fight.timing || fight.sub) return;
+  if (fight.mode !== 'clinch' || fight.busy || fight.over || fight.timing || fight.sub || fight.config.cpu?.attack === false) return;
   const cpu = fight.blue;
   if (fight.now < cpu.nextThink) return;
   const s = fight.style(cpu), lv = LEVELS[fight.level], r = fight.rng();
@@ -88,7 +100,7 @@ export function cpuClinch(fight: Fight) {
 }
 
 export function cpuGround(fight: Fight) {
-  if (fight.mode !== 'ground' || fight.busy || fight.over || fight.timing || fight.sub) return;
+  if (fight.mode !== 'ground' || fight.busy || fight.over || fight.timing || fight.sub || fight.config.cpu?.attack === false) return;
   const cpu = fight.blue, me = fight.human();
   if (fight.now < cpu.nextThink) return;
   const s = fight.style(cpu), lv = LEVELS[fight.level], r = fight.rng();

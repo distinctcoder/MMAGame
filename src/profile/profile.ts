@@ -10,13 +10,17 @@ export interface Profile {
   tells: boolean;
   record: { wins: number; losses: number; draws: number };
   history: FightRecord[];
+  /** Best score per training drill. */
+  training: Record<string, number>;
+  /** Partner behavior for sparring. */
+  sparBehavior: string;
 }
 
 const KEY = 'mma-game.profile.v1';
 const HISTORY = 8;
 
 export function defaultProfile(): Profile {
-  return { name: 'Red', style: 'muay_thai', opponentStyle: 'wrestling', level: 'normal', tells: true, record: { wins: 0, losses: 0, draws: 0 }, history: [] };
+  return { name: 'Red', style: 'muay_thai', opponentStyle: 'wrestling', level: 'normal', tells: true, record: { wins: 0, losses: 0, draws: 0 }, history: [], training: {}, sparBehavior: 'normal' };
 }
 
 /** Reads the saved profile. Storage can be missing or blocked (private windows, previews), so this never throws. */
@@ -26,7 +30,7 @@ export function loadProfile(): Profile {
     if (!raw) return defaultProfile();
     const saved = JSON.parse(raw) as Partial<Profile>;
     const base = defaultProfile();
-    return { ...base, ...saved, record: { ...base.record, ...saved.record }, history: Array.isArray(saved.history) ? saved.history : [] };
+    return { ...base, ...saved, record: { ...base.record, ...saved.record }, history: Array.isArray(saved.history) ? saved.history : [], training: { ...saved.training } };
   } catch {
     return defaultProfile();
   }
@@ -34,6 +38,13 @@ export function loadProfile(): Profile {
 
 export function saveProfile(p: Profile): void {
   try { localStorage.setItem(KEY, JSON.stringify(p)); } catch { /* storage unavailable: keep playing without saving */ }
+}
+
+/** Keeps the higher score. Returns the updated profile and whether this was a new best. */
+export function recordDrill(p: Profile, drill: string, score: number): { profile: Profile; best: boolean } {
+  const prev = p.training[drill];
+  if (prev !== undefined && prev >= score) return { profile: p, best: false };
+  return { profile: { ...p, training: { ...p.training, [drill]: score } }, best: true };
 }
 
 export function recordFight(p: Profile, result: FightRecord['result'], how: string, opponent: string): Profile {

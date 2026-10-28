@@ -6,13 +6,14 @@ import type { Level } from './fight/rules';
 import { Input, type Device } from './input/input';
 import { loadProfile, recordFight, saveProfile, type Profile } from './profile/profile';
 import { createStage, PALETTES, type Stage } from './rig/stage';
+import { TrainingController } from './training/controller';
 import { GameCamera } from './ui/camera';
 import { Hud } from './ui/hud';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
 let profile: Profile = loadProfile();
-let screen: 'menu' | 'fight' = 'menu';
+let screen: 'menu' | 'fight' | 'training' = 'menu';
 
 let stage: Stage;
 try { stage = createStage($<HTMLCanvasElement>('stage')); }
@@ -21,6 +22,7 @@ const meshes = { red: stage.makeFighter(PALETTES.red), blue: stage.makeFighter(P
 
 let hud: Hud;
 let input: Input;
+let training: TrainingController;
 const fight = new Fight(meshes, {
   pop: (at, text, kind) => hud.pop(at, text, kind),
   banner: (text, sub, ms) => hud.banner(text, sub, ms),
@@ -29,11 +31,13 @@ const fight = new Fight(meshes, {
   rumble: (strength, ms) => input.rumble(strength, ms),
   key: name => input.key(name),
   changed: () => hud.refresh(),
-  ended: onEnded
+  ended: onEnded,
+  event: e => { if (screen === 'training') training.onEvent(e); }
 });
-input = new Input(fight, { active: () => screen === 'fight', deviceChanged, restart: startFight });
+input = new Input(fight, { active: () => screen !== 'menu', deviceChanged, restart });
 hud = new Hud(fight, input, stage.camera);
 const camera = new GameCamera(stage.camera, stage.panels);
+training = new TrainingController(fight, input, hud, { get: () => profile, set: p => { profile = p; saveProfile(p); renderProfile(); } });
 
 // ---------- Profile and setup ----------
 function fillStyles(sel: HTMLSelectElement, value: string) {
@@ -75,7 +79,7 @@ $<HTMLInputElement>('p-name').addEventListener('change', e => update({ name: (e.
 for (const [id, key] of [['p-style', 'style'], ['style-red', 'style'], ['p-opp', 'opponentStyle'], ['style-blue', 'opponentStyle'], ['p-level', 'level'], ['level', 'level']] as const) {
   $(id).addEventListener('change', e => {
     update({ [key]: (e.target as HTMLSelectElement).value } as Partial<Profile>);
-    if (screen === 'fight') startFight();
+    if (screen !== 'menu') restart();
   });
 }
 $('tells').addEventListener('change', e => {
@@ -83,9 +87,10 @@ $('tells').addEventListener('change', e => {
   fight.tells = profile.tells;
   if (!fight.tells) hud.tell(null);
 });
-$('restart').addEventListener('click', startFight);
+$('restart').addEventListener('click', restart);
 
 function onEnded(winner: Color | null, how: string) {
+  if (screen !== 'fight') return;
   const result = winner === 'red' ? 'win' : winner ? 'loss' : 'draw';
   profile = recordFight(profile, result, how, SD.styles[profile.opponentStyle].label);
   saveProfile(profile);
@@ -103,6 +108,10 @@ function deviceChanged(kind: Device, id?: string) {
 }
 
 // ---------- Screens ----------
+function restart() {
+  if (screen === 'training') training.start();
+  else startFight();
+}
 function startFight() {
   hud.clearLog();
   hud.clearBanner();
@@ -118,13 +127,21 @@ function resize() {
   stage.camera.updateProjectionMatrix();
 }
 function route() {
-  const next = location.hash === '#fight' ? 'fight' : 'menu';
+  const next = location.hash === '#fight' ? 'fight' : location.hash === '#training' ? 'training' : 'menu';
   $('menu').hidden = next !== 'menu';
-  $('fight-screen').hidden = next !== 'fight';
+  $('fight-screen').hidden = next === 'menu';
+  $('training-panel').hidden = next !== 'training';
+  $('screen-label').textContent = next === 'training' ? 'Training' : 'Fight night \u00b7 3 rounds';
+  $('restart').textContent = next === 'training' ? 'Restart drill' : 'Restart fight';
+  document.querySelector<HTMLLabelElement>('label[for="style-blue"]')!.textContent = next === 'training' ? 'Partner style' : 'CPU style';
   if (next === screen && next === 'menu') return;
   screen = next;
-  if (screen === 'fight') { resize(); startFight(); }
-  else { hud.tell(null); renderProfile(); }
+  if (screen === 'menu') { hud.tell(null); training.stop(); renderProfile(); }
+  else {
+    resize();
+    if (screen === 'training') training.start();
+    else { training.stop(); startFight(); }
+  }
   window.scrollTo(0, 0);
 }
 addEventListener('hashchange', route);
@@ -136,11 +153,12 @@ function frame(real: number) {
   const rdt = Math.min(50, real - last);
   last = real;
   input.poll();
-  if (screen === 'fight') {
+  if (screen !== 'menu') {
     fight.update(real, rdt);
     fight.animate();
     camera.update(fight, rdt);
     hud.frame();
+    if (screen === 'training') training.frame();
     stage.renderer.render(stage.scene, stage.camera);
   }
   requestAnimationFrame(frame);
@@ -171,6 +189,7 @@ hud.buildPads();
 hud.buildDefenseChart();
 hud.buildControlsTable();
 renderProfile();
+training.build();
 $('status').hidden = true;
 route();
 requestAnimationFrame(frame);

@@ -59,9 +59,36 @@ export interface FightEvents {
   /** The set of available moves changed; refresh contextual controls. */
   changed(): void;
   ended(winner: Color | null, how: string): void;
+  /** Optional structured events, used by training drills. */
+  event?(e: FightEvent): void;
 }
 
-export interface FightSetup { redStyle: string; blueStyle: string; level: R.Level; redName?: string }
+/** Steers the CPU for training. Anything left out keeps normal fight behavior. */
+export interface CpuPlan {
+  attack?: boolean;            // false: never strikes, clinches or works on the ground
+  defend?: boolean;            // false: never blocks or dodges
+  move?: boolean;              // false: stands still
+  mix?: Record<string, number>; // strike weights, replacing the style's mix
+  interval?: [number, number]; // steady gap between strikes in ms, instead of the style's aggression
+  keepRange?: number;          // preferred distance, instead of the style's range
+  shootEvery?: number;         // shoot a takedown this often (ms) when close enough
+  takedowns?: boolean;         // false: never shoots
+  clinch?: boolean;            // false: never ties up; true: always closes in to tie up
+}
+export interface FightConfig {
+  infinite?: boolean;    // finishes refill both fighters instead of ending the fight; no knockdowns
+  noClock?: boolean;     // the round clock does not run
+  resetGround?: boolean; // after a takedown lands, both fighters reset to the feet
+  startDist?: number;    // distance between the fighters at the start
+  cpu?: CpuPlan;
+}
+export interface FightSetup { redStyle: string; blueStyle: string; level: R.Level; redName?: string; config?: FightConfig }
+
+/** Structured events for scoring (training drills, stats). */
+export type FightEvent =
+  | { type: 'throw'; attacker: Color; key: string }
+  | { type: 'strike'; attacker: Color; key: string; result: R.DefenseResult | 'whiff' }
+  | { type: 'takedown'; attacker: Color; outcome: 'stuffed' | 'sprawl' | Position };
 
 class Abort extends Error {}
 
@@ -84,6 +111,8 @@ export class Fight {
   lastAction = 0; blockAt = -1e9; blockZone: Zone | null = null; clinchSince = 0; nextShoot = 0;
   camOverride: { pos: Vector3; look: Vector3; fov: number } | null = null;
   koCam: Fighter | null = null;
+  config: FightConfig = {};
+  nextAttack = 0;
   private gen = 0;
 
   constructor(meshes: Record<Color | 'ref', FighterMesh>, private ev: FightEvents) {
@@ -116,16 +145,19 @@ export class Fight {
   start(setup: FightSetup) {
     this.gen++;
     this.red.style = setup.redStyle; this.blue.style = setup.blueStyle; this.level = setup.level;
+    this.config = setup.config || {};
+    this.nextAttack = this.now + 1200;
     this.red.name = setup.redName || 'Red';
     Object.assign(this, { over: false, busy: false, mode: 'stand', round: 1, clock: R.ROUND_MS, scale: 1, slowUntil: 0, koCam: null,
       timing: null, sub: null, top: null, bot: null, pos: null, camOverride: null, nextShoot: this.now + 5000, scores: [] });
-    this.resetFighter(this.red, -60); this.resetFighter(this.blue, 60);
+    const half = (this.config.startDist ?? 120) / 2;
+    this.resetFighter(this.red, -half); this.resetFighter(this.blue, half);
     for (const f of [this.red, this.blue]) { this.face(f); this.stand(f, 'stance', 0); }
     this.primeBodies();
     Object.assign(this.ref, { x: 195, z: -120, yaw: -90, shown: null });
     this.moveRef('ref_stand');
     this.ev.tell(null);
-    this.ev.log('Round 1', `${this.red.name} (${this.style(this.red).label}) vs Blue (${this.style(this.blue).label})`);
+    if (!this.config.noClock) this.ev.log('Round 1', `${this.red.name} (${this.style(this.red).label}) vs Blue (${this.style(this.blue).label})`);
     this.ev.changed();
   }
   private resetFighter(f: Fighter, x: number) {
@@ -210,8 +242,10 @@ export class Fight {
     if (this.timing && real - this.timing.start > this.timing.period * 2.2) this.endTiming(0);
     if (this.sub) this.tickSub(real);
     if (!this.over && this.mode !== 'break') {
-      this.clock -= dt;
-      if (this.clock <= 0) { this.clock = 0; this.endRound(); }
+      if (!this.config.noClock) {
+        this.clock -= dt;
+        if (this.clock <= 0) { this.clock = 0; this.endRound(); }
+      }
       for (const f of [this.red, this.blue]) {
         f.sta = Math.min(R.maxStamina(f.body), f.sta + R.staminaRegen(this.style(f), f.body, f.action.type === 'idle', dt));
       }
@@ -256,6 +290,7 @@ export class Fight {
     cpuSeesWindup(this, this.other(f), f, s, windup);
     if (!this.isHuman(f) && this.tells) this.ev.tell(s);
     this.lastAction = this.now;
+    this.ev.event?.({ type: 'throw', attacker: f.color, key });
   }
   startBlock(f: Fighter, zone: Zone) {
     if (this.mode !== 'stand' || this.over || !['idle', 'block'].includes(f.action.type)) return false;
@@ -295,10 +330,15 @@ export class Fight {
   private impact(att: Fighter) {
     const a = att.action as StrikeAction, s = a.s, def = this.other(att);
     const at = def.bodyJoints[s.part === 'legs' ? 'lhip' : s.part === 'body' ? 'chest' : 'head']!;
-    if (!R.inRange(s, Math.abs(att.x - def.x))) { this.ev.pop(at, 'Whiff', 'miss'); a.recoverMul = 1.6; return; }
+    if (!R.inRange(s, Math.abs(att.x - def.x))) {
+      this.ev.pop(at, 'Whiff', 'miss'); a.recoverMul = 1.6;
+      this.ev.event?.({ type: 'strike', attacker: att.color, key: a.key, result: 'whiff' });
+      return;
+    }
     const da = def.action;
     const out = R.defend(s, da.type === 'evade' ? { type: 'evade', kind: da.kind, active: this.now <= da.tActive }
       : da.type === 'block' ? { type: 'block', zone: da.zone, sinceMs: this.now - da.t0 } : { type: 'none' });
+    this.ev.event?.({ type: 'strike', attacker: att.color, key: a.key, result: out.result });
     if (out.result === 'dodged') {
       this.ev.pop(at, R.EVADED[(da as { kind: EvadeKind }).kind] + '! Counter', 'gold');
       a.recoverMul = 1.6;
@@ -320,7 +360,7 @@ export class Fight {
         this.shake = Math.min(10, dmg * 0.5);
         this.ev.rumble(this.isHuman(def) ? 1 : 0.35, this.isHuman(def) ? 220 : 90);
         if (!tag) tag = [(out.result === 'into' ? 'Into it! ' : a.counter ? 'Counter ' : '') + Math.round(dmg), a.counter ? 'gold' : 'hit'];
-        if (R.knockdownCheck(s.part, dmg, def.headHP, def.headMax, this.rng())) { this.ev.pop(at, tag[0], tag[1]); return this.knockdown(att, def); }
+        if (!this.config.infinite && R.knockdownCheck(s.part, dmg, def.headHP, def.headMax, this.rng())) { this.ev.pop(at, tag[0], tag[1]); return this.knockdown(att, def); }
       }
     }
     if (tag) this.ev.pop(at, tag[0], tag[1]);
@@ -447,6 +487,7 @@ export class Fight {
       const sa = this.style(att), sd = this.style(def);
       const r1 = await this.contest({ att, def, attStat: sa.takedowns, defStat: sd.td_defense, attTitle: 'Level change: explode!', defTitle: 'Read the level change!' });
       if (r1.margin < R.LEVEL_CHANGE_STUFF) {
+        this.ev.event?.({ type: 'takedown', attacker: att.color, outcome: 'stuffed' });
         this.ev.log(def.name + ' reads it and stuffs the shot', r1.detail);
         this.ev.banner('Stuffed', def.name + ' read the level change');
         await this.step(this.pair('stuffed', 300));
@@ -456,6 +497,7 @@ export class Fight {
       await this.step(this.pair('shot', 220));
       const r2 = await this.contest({ att, def, attStat: sa.takedowns, defStat: sd.td_defense, attTitle: 'Grab: drive through!', defTitle: 'Sprawl!' });
       const land = R.takedownOutcome(r2.margin);
+      this.ev.event?.({ type: 'takedown', attacker: att.color, outcome: land });
       if (land === 'sprawl') {
         this.ev.log(def.name + ' sprawls and stuffs the takedown', r2.detail);
         this.ev.banner('Sprawl', 'Takedown stuffed');
@@ -470,6 +512,7 @@ export class Fight {
       this.hurt(def, 'body', 4, att);
       if (land === 'guard') { this.ev.log(def.name + ' scrambles and lands in guard', r2.detail); this.ev.banner('Takedown', def.name + ' lands in closed guard'); }
       else { this.ev.log(`${att.name} takes it down to ${this.label(land)}`, r2.detail); this.ev.banner('Takedown', `${att.name} lands in ${this.label(land)}`); }
+      if (this.config.resetGround) { await this.step(this.sleep(1300)); await this.backToFeet(500); }
     });
   }
   private enterGround(pos: Position, dur: number) {
@@ -712,6 +755,7 @@ export class Fight {
         this.hurt(def, 'body', 4, att);
         this.ev.log(`${att.name} trips ${def.name} into ${this.label(land)}`, r.detail);
         this.ev.banner('Trip', `${att.name} lands in ${this.label(land)}`);
+        if (this.config.resetGround) { await this.step(this.sleep(1300)); await this.backToFeet(500); }
       } else {
         this.ev.log(`${def.name} stays up and ${ctrl ? 'takes the tie' : 'keeps the tie'}`, r.detail);
         if (ctrl) this.swapTop();
@@ -737,6 +781,12 @@ export class Fight {
   private checkFinish(att: Fighter, def: Fighter, what: string) {
     const by = R.finishedBy(def);
     if (!by) return false;
+    if (this.config.infinite) {
+      for (const f of [this.red, this.blue]) { f.headHP = f.headMax; f.body = 0; f.legs = 0; f.sta = 100; }
+      this.ev.banner('Reset', `${def.name} would have been finished. Both fighters refilled.`, 1400);
+      this.ev.log(`${att.name} would have won by ${by === 'head' ? 'KO' : 'TKO'}`, 'Training: both fighters refilled');
+      return false;
+    }
     const how = by === 'head' ? [this.mode === 'stand' ? 'KO' : 'TKO', what] : ['TKO', by === 'legs' ? 'leg kicks' : 'body shots'];
     this.finish(att, def, how[0], how[1]);
     return true;

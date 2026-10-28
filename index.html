@@ -26,11 +26,11 @@
         <span class="mode-text">Three rounds against the CPU. Pick the styles below.</span>
         <span class="mode-tag">Play</span>
       </a>
-      <div class="mode off" aria-disabled="true">
+      <a class="mode" href="#training" id="go-training">
         <span class="mode-name">Training</span>
-        <span class="mode-text">Sparring partner, block and dodge drills, combo and takedown practice.</span>
-        <span class="mode-tag">Next up</span>
-      </div>
+        <span class="mode-text">Sparring, block and head movement drills, combos and sprawls. Beat your best scores.</span>
+        <span class="mode-tag">Play</span>
+      </a>
       <div class="mode off" aria-disabled="true">
         <span class="mode-name">The park</span>
         <span class="mode-text">Walk the city, find gyms, buy gear, take pickup fights.</span>
@@ -62,8 +62,16 @@
   <section class="screen" id="fight-screen" hidden>
     <div class="topbar">
       <a class="back" href="#">&larr; Menu</a>
-      <span class="eyebrow">Fight night &middot; 3 rounds</span>
+      <span class="eyebrow" id="screen-label">Fight night &middot; 3 rounds</span>
     </div>
+    <section class="training" id="training-panel" hidden>
+      <div class="drills" id="drills"></div>
+      <div class="drill-info">
+        <div class="drill-head"><h2 id="drill-name"></h2><span class="best" id="drill-best"></span></div>
+        <p id="drill-blurb"></p>
+        <div class="field" id="spar-field"><label class="label" for="spar">Partner</label><select id="spar"></select></div>
+      </div>
+    </section>
     <div class="stage">
       <div class="canvas-box" id="box">
         <canvas id="stage" aria-label="Two cel-shaded 3D MMA fighters and a referee in an octagon cage"></canvas>
@@ -81,6 +89,17 @@
             <div class="meter sta"><i id="blue-sta"></i></div>
             <div class="dmg"><span>Body <b id="blue-body">0</b></span><span>Legs <b id="blue-legs">0</b></span></div>
           </div>
+        </div>
+        <div class="drill-hud" id="drill-hud" hidden>
+          <div class="dh-top"><span id="dh-name"></span><b id="dh-score"></b></div>
+          <div class="dh-progress" id="dh-progress"></div>
+          <div class="chips" id="dh-combo"></div>
+          <div class="dh-last" id="dh-last"></div>
+        </div>
+        <div class="results" id="results" hidden>
+          <div class="r-score"><span class="label" id="r-label">Score</span><b id="r-score">0</b><span id="r-best"></span></div>
+          <p id="r-detail"></p>
+          <div class="row"><button type="button" id="r-retry">Go again</button><button type="button" id="r-pick">Pick another drill</button></div>
         </div>
         <div class="tell" id="tell" hidden></div>
         <div class="banner" id="banner"></div>

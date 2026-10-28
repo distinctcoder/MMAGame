@@ -1,6 +1,6 @@
 # 2DMMAGame
 
-A browser MMA game with toon-shaded 3D fighters that read as 2D art: striking with zone blocks and head movement, the clinch, three-phase takedowns, a ground game with sweeps and submissions, a referee, and three-round fights. Plays with keyboard, touch, or a PS5 DualSense.
+A browser MMA game with toon-shaded 3D fighters, a fight mode and a training mode, that read as 2D art: striking with zone blocks and head movement, the clinch, three-phase takedowns, a ground game with sweeps and submissions, a referee, and three-round fights. Plays with keyboard, touch, or a PS5 DualSense.
 
 ## Getting started
 
@@ -31,8 +31,10 @@ src/fight/cpu.ts        CPU opponent
 src/input/input.ts      keyboard and gamepad mapped to fight commands, rumble, control labels
 src/ui/hud.ts           HUD, prompts, contextual buttons, controls and defense charts
 src/ui/camera.ts        game camera
-src/profile/profile.ts  your fighter (name, styles, record), saved in the browser
-tests/                  rules.test.ts (fight rules) and data.test.ts (data integrity)
+src/training/            training mode: drills.ts (drill and partner definitions), session.ts (pure scoring),
+                        controller.ts (runs drills, drill HUD, results, best scores)
+src/profile/profile.ts  your fighter (name, styles, record, best drill scores), saved in the browser
+tests/                  rules.test.ts (fight rules), data.test.ts (data integrity), training.test.ts (drill scoring and placement)
 ```
 
 The fight logic never touches the DOM. It reports what happened through the `FightEvents` interface (pops, banners, log lines, rumble), which the HUD and input modules implement. That keeps the rules testable and lets new screens, such as training mode, drive the same fight.
@@ -44,6 +46,7 @@ Most tuning is data, not code:
 - **`src/data/strikes.json`**: strikes (windup, damage, range, stamina cost, which block or head movement beats them), standing poses, and styles (stats and strike mix for the CPU).
 - **`src/data/fight.json`**: paired poses for the clinch, takedowns, ground positions and submissions.
 - **`src/fight/rules.ts`**: the formulas and constants (block table, counter windows, damage scaling, contest math, judging).
+- **`src/training/drills.ts`**: training drills (length, partner, partner behavior, points per outcome), sparring partner behaviors and the combo list.
 
 `npm test` checks that every strike, pose, zone and style the data refers to exists and that every pose solves, so typos fail fast.
 
