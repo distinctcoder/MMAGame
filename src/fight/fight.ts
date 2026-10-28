@@ -1,11 +1,13 @@
 // The fight: standing exchanges, the clinch, takedowns, the ground game, submissions, rounds and the referee.
 // Rendering and the DOM stay outside; this module talks to them through FightEvents.
 import { FD, SD } from '../data';
-import type { EvadeKind, Position, Role, Strike, Style, Zone } from '../data/types';
+import type { BodyPart, EvadeKind, Position, Role, Strike, Style, Zone } from '../data/types';
 import { blendState, bodyJoints, clamp, cloneJoints, ease, qEuler, rot, V, add, type Joints, type RigState, type Vector3 } from '../rig/math';
 import { PairPoses, resolveStand, standSpec, toWorld, type Opponent } from '../rig/poses';
 import type { FighterMesh } from '../rig/stage';
+import { Quaternion } from 'three';
 import * as R from './rules';
+import * as W from './weight';
 import type { Sfx } from '../audio/synth';
 import { cpuClinch, cpuDefend, cpuGround, cpuSeesWindup, cpuStand } from './cpu';
 
@@ -18,6 +20,8 @@ export interface StrikeAction {
   tHit: number; counter: boolean; counterMul: number; gassed: boolean; aim: Joints;
   /** How far the striker was turned away from the target when they threw, degrees. */
   attErr: number;
+  /** When the windup started. */
+  t0: number;
   recoverMul: number; tRecover: number; tEnd: number;
 }
 export type Action =
@@ -46,6 +50,8 @@ export interface Fighter extends Animated {
   lean: R.Lean; leanTarget: R.Lean;
   /** Taps (touch buttons, the CPU) hold a guard or lean until this time. */
   holdUntil: number;
+  /** The last hit taken: the head snaps and the body folds away from `dir`, then springs back. */
+  jolt: { t0: number; dir: Vector3; snap: number; fold: number } | null;
   headMax: number; headHP: number; body: number; legs: number; sta: number;
   action: Action; queued: Queued | null;
   counterUntil: number; counterMul: number;
@@ -75,6 +81,8 @@ export interface FightEvents {
   event?(e: FightEvent): void;
   /** Optional sound cues. */
   sfx?(e: Sfx): void;
+  /** Optional impact effect at a point: how hard (0 to 1) and what kind. */
+  impact?(at: Vector3, power: number, kind: 'hit' | 'block' | 'parry'): void;
 }
 
 /** Steers the CPU for training. Anything left out keeps normal fight behavior. */
@@ -114,6 +122,7 @@ export type FightEvent =
 class Abort extends Error {}
 /** An angle folded into -180..180 degrees. */
 const wrapDeg = (a: number) => ((a + 540) % 360) - 180;
+const UP = V(0, 1, 0);
 
 const blankJoints = (): Joints => bodyJoints({ P: V(), Qp: qEuler(), Qc: qEuler(), Qh: qEuler(), Qy: qEuler() });
 
@@ -129,6 +138,11 @@ export class Fight {
   round = 1; clock = R.ROUND_MS; scores: [number, number][] = [];
   level: R.Level = 'normal'; tells = true;
   shake = 0;
+  /** Hit-stop: fight time stands still until this real time. */
+  freezeUntil = 0;
+  realNow = 0;
+  /** The camera's jolt along the last hit's direction. */
+  kick: { dir: Vector3; amp: number; t0: number } | null = null;
   top: Fighter | null = null; bot: Fighter | null = null; anchor = 0; d = 1; pos: Position | null = null; pairName = '';
   subV = 0; timing: Timing | null = null; sub: SubState | null = null;
   lastAction = 0; blockAt = -1e9; blockZone: Zone | null = null; clinchSince = 0; nextShoot = 0;
@@ -141,7 +155,7 @@ export class Fight {
   constructor(meshes: Record<Color | 'ref', FighterMesh>, private ev: FightEvents) {
     const fighter = (color: Color, name: string): Fighter => ({
       color, name, style: 'mma', stats: SD.styles.mma, mesh: meshes[color], x: 0, z: 0, fromX: 0, toX: 0, fromZ: 0, toZ: 0, moveT0: 0, moveDur: 0, dir: 1, yaw: 90,
-      stepKind: null, stepEnd: 0, turnSince: 0, guard: {}, guardTarget: null, guardSince: 0, lean: { x: 0, y: 0 }, leanTarget: { x: 0, y: 0 }, holdUntil: 0,
+      stepKind: null, stepEnd: 0, turnSince: 0, guard: {}, guardTarget: null, guardSince: 0, lean: { x: 0, y: 0 }, leanTarget: { x: 0, y: 0 }, holdUntil: 0, jolt: null,
       headMax: 100, headHP: 100, body: 0, legs: 0, sta: 100, action: { type: 'idle', since: 0 }, queued: null,
       counterUntil: 0, counterMul: R.PARRY_COUNTER, dealt: 0, roundDealt: 0, shown: null, anim: null,
       bodyJoints: blankJoints(), nextThink: 0, plannedBlock: null, clinchUntil: 0
@@ -192,7 +206,7 @@ export class Fight {
   }
   private resetFighter(f: Fighter, x: number) {
     Object.assign(f, { x, z: 0, fromX: x, toX: x, fromZ: 0, toZ: 0, moveDur: 0, stepKind: null, stepEnd: 0, turnSince: 0,
-      guard: {}, guardTarget: null, guardSince: 0, lean: { x: 0, y: 0 }, leanTarget: { x: 0, y: 0 }, holdUntil: 0, headMax: R.headMax(this.style(f)), body: 0, legs: 0, sta: 100,
+      guard: {}, guardTarget: null, guardSince: 0, lean: { x: 0, y: 0 }, leanTarget: { x: 0, y: 0 }, holdUntil: 0, jolt: null, headMax: R.headMax(this.style(f)), body: 0, legs: 0, sta: 100,
       action: { type: 'idle', since: 0 }, clinchUntil: 0, queued: null, counterUntil: 0, dealt: 0, roundDealt: 0,
       shown: null, anim: null, nextThink: 0, plannedBlock: null });
     f.headHP = f.headMax;
@@ -312,15 +326,18 @@ export class Fight {
   animate() {
     for (const f of [this.red, this.blue, this.ref] as Animated[]) {
       f.shown = this.animState(f);
-      (f as Fighter | Referee).mesh.update(f.shown);
+      // Weight is drawn on top and never fed back into the animation, so transitions start from the clean pose.
+      const drawn = 'color' in f ? this.addWeight(f as Fighter, f.shown) : f.shown;
+      (f as Fighter | Referee).mesh.update(drawn);
+      if ('color' in f) (f as Fighter).bodyJoints = bodyJoints(drawn);
     }
-    for (const f of [this.red, this.blue]) f.bodyJoints = bodyJoints(f.shown!);
   }
 
   // ---------- Frame update ----------
   update(real: number, rdt: number) {
+    this.realNow = real;
     if (this.slowUntil && real > this.slowUntil) { this.scale = 1; this.slowUntil = 0; }
-    const dt = rdt * this.scale;
+    const dt = real < this.freezeUntil ? 0 : rdt * this.scale;
     this.now += dt;
     if (this.timing && real - this.timing.start > this.timing.period * 2.2) this.endTiming(0);
     if (this.sub) this.tickSub(real);
@@ -377,7 +394,7 @@ export class Fight {
     f.counterUntil = 0;
     // Strikes go where the target was when thrown, so head movement can make them miss.
     const aim = cloneJoints(this.other(f).bodyJoints);
-    f.action = { type: 'strike', key, s, phase: 'wind', tHit: this.now + windup, counter, counterMul, gassed, aim, attErr, recoverMul: 1, tRecover: 0, tEnd: 0 };
+    f.action = { type: 'strike', key, s, phase: 'wind', tHit: this.now + windup, counter, counterMul, gassed, aim, attErr, t0: this.now, recoverMul: 1, tRecover: 0, tEnd: 0 };
     this.stand(f, s.wind, Math.max(80, windup - 70));
     cpuSeesWindup(this, this.other(f), f, s, windup);
     if (!this.isHuman(f) && this.tells) this.ev.tell(s);
@@ -452,6 +469,69 @@ export class Fight {
     Object.assign(f, { fromX: f.x, toX: tx, fromZ: f.z, toZ: tz, moveT0: this.now, moveDur: dur });
     f.sta = Math.max(0, f.sta - (side ? 1.5 : 1));
   }
+  // ---------- Weight ----------
+  /**
+   * The feel of an impact: freeze the action for a moment, snap the defender away from the blow and spring them back,
+   * kick the camera along the blow, knock them back a step on heavy shots, and show a burst at the contact point.
+   */
+  private weigh(att: Fighter, def: Fighter, part: BodyPart, result: R.DefenseResult, dmg: number, at: Vector3, zone?: Zone) {
+    const stop = W.hitStopMs(result, dmg);
+    if (stop) this.freezeUntil = Math.max(this.freezeUntil, this.realNow + stop);
+    if (result === 'dodged') return;
+    const r = W.reaction(result, part, dmg);
+    const dir = def.bodyJoints.chest.clone().sub(att.bodyJoints.chest).setY(0);
+    if (dir.lengthSq() < 1e-4) dir.set(def.x >= att.x ? 1 : -1, 0, 0);
+    dir.normalize();
+    // Hooks and kicks land from the side: the head goes across, not just back.
+    if (zone === 'left' || zone === 'right') {
+      const left = rot(qEuler([0, def.yaw, 0]), [1, 0, 0]);
+      dir.multiplyScalar(0.45).addScaledVector(left, zone === 'right' ? 1 : -1).normalize();
+    }
+    def.jolt = { t0: this.now, dir, snap: r.snap, fold: r.fold };
+    this.kick = { dir: dir.clone(), amp: r.shake, t0: this.realNow };
+    const clean = result === 'hit' || result === 'into' || result === 'grazed' || result === 'partial';
+    this.ev.impact?.(at, clean ? clamp(dmg / 16, 0.15, 1) : 0.25, result === 'parried' ? 'parry' : clean ? 'hit' : 'block');
+    if (clean && dmg >= W.SLOW_MO_DMG) { this.scale = Math.min(this.scale, 0.45); this.slowUntil = Math.max(this.slowUntil, this.realNow + stop + 260); }
+    // Knockback: a real step back along the blow, standing only.
+    if (this.mode === 'stand' && r.push >= 3) {
+      let tx = def.x + dir.x * r.push, tz = clamp(def.z + dir.z * r.push, -130, 130);
+      const rr = Math.hypot(tx, tz);
+      if (rr > 260) { tx *= 260 / rr; tz *= 260 / rr; }
+      Object.assign(def, { fromX: def.x, toX: tx, fromZ: def.z, toZ: tz, moveT0: this.now, moveDur: 140 });
+    }
+  }
+  /** The weight layer, added on top of the animated pose: the striker's load and drive, and the hit reaction. */
+  private addWeight(f: Fighter, st: RigState): RigState {
+    let P = st.P, Qp = st.Qp, Qc = st.Qc, Qh = st.Qh;
+    const a = f.action;
+    if (a.type === 'strike' && this.mode === 'stand') {
+      const w = W.weightOf(a.key), amt = W.driveAmount(a, this.now);
+      if (amt) {
+        // Feet stay planted (their targets are on the mat), so moving the hips reads as a weight shift.
+        const fwd = rot(st.Qy, [0, 0, 1]);
+        P = P.clone().addScaledVector(fwd, amt > 0 ? amt * w.lunge : amt * w.load);
+        P.y -= Math.max(0, amt) * w.drop;
+        const twist = (deg: number) => new Quaternion().setFromAxisAngle(UP, deg * Math.PI / 180);
+        Qp = twist(amt * w.twist * 0.7).multiply(Qp);
+        Qc = twist(amt * w.twist).multiply(Qc);
+        Qh = twist(amt * w.twist * 0.5).multiply(Qh);
+      }
+    }
+    const j = f.jolt;
+    if (j) {
+      const t = this.now - j.t0;
+      if (t > 900) f.jolt = null;
+      else {
+        const sp = W.spring(t), axis = UP.clone().cross(j.dir).normalize();
+        const turn = (deg: number) => new Quaternion().setFromAxisAngle(axis, deg * Math.PI / 180);
+        // The head snaps away from the blow; a body shot folds the chest toward the attacker.
+        if (j.snap) { Qh = turn(j.snap * sp).multiply(Qh); Qc = turn(j.snap * 0.3 * sp).multiply(Qc); }
+        if (j.fold) { Qc = turn(-j.fold * sp).multiply(Qc); Qh = turn(-j.fold * 0.5 * sp).multiply(Qh); }
+      }
+    }
+    return P === st.P && Qp === st.Qp && Qc === st.Qc && Qh === st.Qh ? st : { ...st, P, Qp, Qc, Qh };
+  }
+
   private stun(f: Fighter, zone: Zone, dmg: number) {
     const name = { high: 'hit_high', left: 'hit_left', right: 'hit_right', body: 'hit_body', low: 'hit_low' }[zone];
     f.action = { type: 'stun', tEnd: this.now + 160 + dmg * 9 };
@@ -492,11 +572,11 @@ export class Fight {
     const dmg = R.strikeDamage(s, this.style(att), out.mult * foot.dmg, a, this.rng());
     this.ev.sfx?.(out.result === 'checked' ? { k: 'check' } : out.result === 'parried' ? { k: 'parry' }
       : out.mult >= 0.5 && dmg >= 1 ? { k: 'hit', part: s.part, dmg } : { k: 'block' });
+    this.weigh(att, def, s.part, out.result, dmg, at, s.zone);
     if (dmg >= 1) {
       this.hurt(def, s.part, dmg, att);
       if (out.mult >= 0.5) {
         this.stun(def, s.zone, dmg);
-        this.shake = Math.min(10, dmg * 0.5);
         this.ev.rumble(this.isHuman(def) ? 1 : 0.35, this.isHuman(def) ? 220 : 90);
         // Name what footwork did, so it is learnable: angle, outside foot, planted.
         const why = foot.tags.find(t => t === 'Angle' || t === 'Outside foot' || t === 'Planted');
@@ -701,12 +781,13 @@ export class Fight {
       const blocked = cpuDef ? cpuBlocks : performance.now() - this.blockAt < 520;
       await this.step(this.roleAnim(att, 'top_punch', 100));
       const at = def.bodyJoints.head;
-      if (blocked) { this.ev.pop(at, 'Blocked', 'block'); this.ev.sfx?.({ k: 'block' }); this.hurt(def, 'head', 1, att); }
+      if (blocked) { this.ev.pop(at, 'Blocked', 'block'); this.ev.sfx?.({ k: 'block' }); this.weigh(att, def, 'head', 'blocked', 1, at); this.hurt(def, 'head', 1, att); }
       else {
         const dmg = R.gnpDamage(this.style(att), this.pos!, this.rng());
         this.ev.sfx?.({ k: 'hit', part: 'head', dmg });
         this.ev.pop(at, String(Math.round(dmg)), 'hit');
-        this.shake = 5; this.ev.rumble(this.isHuman(def) ? 0.9 : 0.3, 140);
+        this.weigh(att, def, 'head', 'hit', dmg, at);
+        this.ev.rumble(this.isHuman(def) ? 0.9 : 0.3, 140);
         void this.roleAnim(def, 'bot_hit', 90);
         this.hurt(def, 'head', dmg, att);
       }
@@ -849,12 +930,13 @@ export class Fight {
       att.sta = Math.max(0, att.sta - (kind === 'knee' ? 6 : 5));
       await this.step(this.roleAnim(att, kind, 100));
       const at = def.bodyJoints[kind === 'knee' ? 'abd' : 'head'];
-      if (blocked) { this.ev.pop(at, 'Blocked', 'block'); this.ev.sfx?.({ k: 'block' }); this.hurt(def, zone === 'body' ? 'body' : 'head', 1, att); }
+      if (blocked) { this.ev.pop(at, 'Blocked', 'block'); this.ev.sfx?.({ k: 'block' }); this.weigh(att, def, zone === 'body' ? 'body' : 'head', 'blocked', 1, at); this.hurt(def, zone === 'body' ? 'body' : 'head', 1, att); }
       else {
         const dmg = R.clinchDamage(kind, this.style(att), ctrl, this.rng());
         this.ev.sfx?.({ k: 'hit', part: kind === 'knee' ? 'body' : 'head', dmg });
         this.ev.pop(at, String(Math.round(dmg)), 'hit');
-        this.shake = Math.min(9, dmg * 0.6); this.ev.rumble(this.isHuman(def) ? 0.9 : 0.3, 160);
+        this.weigh(att, def, kind === 'knee' ? 'body' : 'head', 'hit', dmg, at);
+        this.ev.rumble(this.isHuman(def) ? 0.9 : 0.3, 160);
         void this.roleAnim(def, kind === 'knee' ? 'hitbody' : 'hithead', 90);
         this.hurt(def, kind === 'knee' ? 'body' : 'head', dmg, att);
       }
@@ -1080,7 +1162,7 @@ export class Fight {
     this.primeBodies();
     for (const f of [this.red, this.blue]) { this.stand(f, 'stance', 0); f.shown = this.animState(f); f.bodyJoints = bodyJoints(f.shown); }
     const s = SD.strikes[strikeKey || 'jab'];
-    this.blue.action = { type: 'strike', key: strikeKey || 'jab', s, phase: 'extend', tHit: 0, counter: false, counterMul: 1, gassed: false, aim: cloneJoints(this.red.bodyJoints), attErr: 0, recoverMul: 1, tRecover: 0, tEnd: 0 };
+    this.blue.action = { type: 'strike', key: strikeKey || 'jab', s, phase: 'extend', tHit: 0, counter: false, counterMul: 1, gassed: false, aim: cloneJoints(this.red.bodyJoints), attErr: 0, t0: 0, recoverMul: 1, tRecover: 0, tEnd: 0 };
     this.stand(this.red, redPose, 0); this.stand(this.blue, bluePose, 0);
   }
   debugPairPose(name: string, topColor: Color, ov?: Partial<Record<Role, string>>, subU?: number) {

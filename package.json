@@ -10,7 +10,9 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "build:artifact": "npm run build && node scripts/artifact.mjs"
+    "build:artifact": "npm run build && node scripts/artifact.mjs",
+    "prebuild": "node scripts/voice-manifest.mjs",
+    "predev": "node scripts/voice-manifest.mjs"
   },
   "dependencies": {
     "three": "0.160.0"

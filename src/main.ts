@@ -75,7 +75,8 @@ const fight = new Fight(meshes, {
   changed: () => hud.refresh(),
   ended: onEnded,
   event: e => { if (screen === 'training') training.onEvent(e); voices.event(e, performance.now()); },
-  sfx: e => { sfxCounts[e.k] = (sfxCounts[e.k] || 0) + 1; sound.play(e); voices.cue(e, performance.now()); }
+  sfx: e => { sfxCounts[e.k] = (sfxCounts[e.k] || 0) + 1; sound.play(e); voices.cue(e, performance.now()); },
+  impact: (at, power, kind) => hud.burst(at, power, kind)
 });
 const FIGHTING: Screen[] = ['fight', 'training', 'pickup', 'bout'];
 input = new Input(fight, { active: () => FIGHTING.includes(screen), deviceChanged, restart });

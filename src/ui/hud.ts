@@ -9,6 +9,16 @@ import { clamp, type Vector3 } from '../rig/math';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
+/** A ten-point star with an ink outline, for impact bursts. */
+const BURST_SVG = (() => {
+  const pts: string[] = [];
+  for (let i = 0; i < 20; i++) {
+    const a = (i / 20) * Math.PI * 2, r = i % 2 ? 22 : 50 - (i % 4) * 4;
+    pts.push(`${(50 + Math.cos(a) * r).toFixed(1)},${(50 + Math.sin(a) * r).toFixed(1)}`);
+  }
+  return `<svg viewBox="0 0 100 100" aria-hidden="true"><polygon points="${pts.join(' ')}"/></svg>`;
+})();
+
 // Contextual on-screen buttons. Each has a command and a label key for the keyboard or controller glyph.
 type Ctx = 'stand' | 'clinch' | 'top' | 'bot' | 'time' | 'none';
 const ACTIONS: { ctx: Ctx; cmd: string; text: string; key: string }[] = [
@@ -62,6 +72,18 @@ export class Hud {
     el.style.left = s.x + 'px'; el.style.top = s.y + 'px';
     this.box.appendChild(el);
     setTimeout(() => el.remove(), 950);
+  }
+  /** A toon starburst at the point of contact: bigger for harder hits, small and pale for blocks, gold for parries. */
+  burst(at: Vector3, power: number, kind: 'hit' | 'block' | 'parry') {
+    const el = document.createElement('div');
+    el.className = 'burst ' + kind;
+    const s = this.project(at);
+    el.style.left = s.x + 'px'; el.style.top = s.y + 'px';
+    el.style.setProperty('--size', Math.round(26 + power * 70) + 'px');
+    el.style.setProperty('--spin', Math.round(Math.random() * 40 - 20) + 'deg');
+    el.innerHTML = BURST_SVG;
+    this.box.appendChild(el);
+    setTimeout(() => el.remove(), 320);
   }
   banner(text: string, sub?: string | null, ms = 1200) {
     const el = $('banner');

@@ -22,6 +22,18 @@ export class GameCamera {
     else { tPos = V(mid + 70, 128, 820); tLook = V(mid, 102, 0); fov = 17.5; }
 
     this.follow(tPos, tLook, fov, rdt);
+    // A hit jolts the camera along the blow, then it springs back once.
+    const k = fight.kick;
+    if (k) {
+      const t = performance.now() - k.t0;
+      if (t > 500) fight.kick = null;
+      else {
+        const s = k.amp * Math.exp(-t / 90) * Math.cos(t * Math.PI * 2 / 220);
+        this.camera.position.addScaledVector(k.dir, s);
+        this.camera.position.y += s * 0.35;
+        this.camera.lookAt(this.look.clone().addScaledVector(k.dir, s * 0.5));
+      }
+    }
     if (fight.shake > 0.2) {
       this.camera.position.add(V(Math.random() * 2 - 1, Math.random() * 2 - 1, 0).multiplyScalar(fight.shake));
       this.camera.lookAt(this.look);

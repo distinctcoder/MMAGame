@@ -73,6 +73,8 @@ export function playSfx(ac: Ctx, out: AudioNode, buf: AudioBuffer, e: Sfx, t = a
     }
     case 'hit': {
       const p = clamp(e.dmg / 12, 0.35, 1.25);
+      // Heavy shots get a sub-bass thud underneath, felt more than heard.
+      if (e.dmg >= 8) tone(ac, out, t, { f: 70, f2: 34, peak: 0.5 * clamp((e.dmg - 6) / 10, 0.2, 1), attack: 0.004, decay: 0.32 });
       if (e.part === 'head') {
         tone(ac, out, t, { f: vary(150), f2: 55, peak: 0.75 * p, decay: 0.16 });
         noise(ac, out, buf, t, { type: 'bandpass', f: vary(1900), q: 0.9, peak: 0.85 * p, decay: 0.06 });

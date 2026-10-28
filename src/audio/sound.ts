@@ -109,7 +109,13 @@ export class Sound {
   /** Fetch and decode every voice clip, trimming the silent padding. Missing clips are skipped. */
   private async loadVoices() {
     const ac = this.ac!;
-    await Promise.all(Object.entries(VOICE).map(async ([id, line]) => {
+    // Only request clips the build found (see scripts/voice-manifest.mjs).
+    let available: Set<string>;
+    try {
+      const res = await fetch(this.voiceBase + 'manifest.json');
+      available = new Set(res.ok ? await res.json() as string[] : []);
+    } catch { return; }
+    await Promise.all(Object.entries(VOICE).filter(([, line]) => available.has(line.file)).map(async ([id, line]) => {
       try {
         const res = await fetch(this.voiceBase + line.file + '.mp3');
         if (!res.ok) return;

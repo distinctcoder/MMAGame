@@ -57,6 +57,16 @@ Where you stand changes your strikes (`footwork` in `src/fight/rules.ts`):
 
 The guard and head movement are held and blend freely. Hold Space (L1) with a direction to keep a guard in that zone; raise it just before impact to parry. Hold F with any mix of W/A/S/D (or push the right stick) to lean: a strike only misses as far as your head has actually moved off its line, so half a slip grazes, and slipping and ducking together is a bob and weave. A readout under your meters shows range, angles and your lead foot.
 
+## Weight
+
+Strikes are built to feel heavy (`src/fight/weight.ts`):
+- The striker loads their weight back through the windup, then drives through the strike: hips turn and lunge while the feet stay planted.
+- Contact freezes the action for a moment (hit-stop), longer for harder clean shots and briefly for blocks; the heaviest shots also slow time for a beat.
+- The defender's head snaps away from the blow and springs back, body shots fold them, and heavy shots knock them back a step. Hooks and kicks knock the head across rather than back.
+- The camera jolts along the line of the blow, a toon starburst marks the contact point, and heavy shots add a sub-bass thud.
+
+The weight layer is drawn on top of the animation and never fed back into it, so transitions stay clean.
+
 ## Sound
 
 Every sound is synthesized in the browser with Web Audio, so there are no audio files to ship:
@@ -64,7 +74,7 @@ Every sound is synthesized in the browser with Web Audio, so there are no audio 
 - swings whoosh, takedowns slam, the bell rings each round, and taps sound on a submission
 - the crowd roars on big moments, the gym is quieter, and the park has a street hum
 
-Voices: a referee, a ring announcer and Coach Ruiz in your corner, recorded with Higgsfield (Seed Audio). `src/audio/voice.ts` lists the lines and decides who speaks: round calls, "Fight!", stoppages, the ten-second warning, decisions, and corner shouts that react to what happens to your fighter. Clips go in `public/voice/<name>.mp3`; missing clips are skipped, and the silent padding is trimmed on load. Turn voices off with the Voices box on the main menu.
+Voices: a referee, a ring announcer and Coach Ruiz in your corner, recorded with Higgsfield (Seed Audio). `src/audio/voice.ts` lists the lines and decides who speaks: round calls, "Fight!", stoppages, the ten-second warning, decisions, and corner shouts that react to what happens to your fighter. Clips go in `public/voice/<name>.mp3` (the build lists them in a manifest, so only existing clips are requested), and the silent padding is trimmed on load. Turn voices off with the Voices box on the main menu.
 
 Set the volume or mute on the main menu, use the Sound button above the fight, or press M. Audio starts after your first click or key press, as browsers require. The fight logic only emits cues (`FightEvents.sfx`); `src/audio/synth.ts` is where to tune how they sound.
 
