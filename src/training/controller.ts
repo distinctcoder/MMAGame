@@ -2,6 +2,8 @@
 import { SD } from '../data';
 import type { Fight, FightEvent } from '../fight/fight';
 import type { Input } from '../input/input';
+import { DRILL_TRAINS, drillXp, STAT_LABEL } from '../park/data';
+import { addXp } from '../park/progress';
 import { recordDrill, type Profile } from '../profile/profile';
 import type { Hud } from '../ui/hud';
 import { DRILLS, SPAR_BEHAVIORS, type DrillId } from './drills';
@@ -13,6 +15,8 @@ export interface ProfileStore { get(): Profile; set(p: Profile): void }
 
 export class TrainingController {
   drillId: DrillId = 'spar';
+  /** Set when the drill was started from the park gym; shows a way back. */
+  fromPark = false;
   private session: Session | null = null;
   private ended = false;
   private flashTimer = 0;
@@ -74,6 +78,7 @@ export class TrainingController {
     $('box').classList.add('training-on');
     $('drill-hud').hidden = false;
     $('results').hidden = true;
+    $('r-park').hidden = !this.fromPark;
     $('dh-last').textContent = '';
     this.hud.log(d.name, d.kind === 'spar' ? SPAR_BEHAVIORS[p.sparBehavior]?.label : d.blurb);
     this.renderPanel();
@@ -132,9 +137,15 @@ export class TrainingController {
     // Stop the partner and stand them still while the results show.
     this.fight.config = { ...this.fight.config, cpu: { attack: false, defend: false, move: false, takedowns: false, clinch: false } };
     this.hud.tell(null);
-    const { profile, best } = recordDrill(this.store.get(), d.id, s.score);
+    const { profile: scored, best } = recordDrill(this.store.get(), d.id, s.score);
     const prev = this.store.get().training[d.id];
+    // Drills also train your fighter's stats for park fights.
+    const trains = DRILL_TRAINS[d.id];
+    const { park, gains } = trains ? addXp(scored.park, trains, drillXp(s.score)) : { park: scored.park, gains: [] };
+    const profile = { ...scored, park };
     this.store.set(profile);
+    $('r-xp').textContent = gains.map(g => `+${g.xp} ${STAT_LABEL[g.stat]} XP${g.to > g.from ? ` (level ${g.to})` : ''}`).join(' · ');
+    $('r-xp').hidden = !gains.length;
     $('r-score').textContent = String(s.score);
     const bestEl = $('r-best');
     bestEl.textContent = best ? (prev === undefined ? 'First score saved' : `New best! Old best ${prev}`) : `Your best: ${profile.training[d.id]}`;

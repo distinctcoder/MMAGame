@@ -31,11 +31,11 @@
         <span class="mode-text">Sparring, block and head movement drills, combos and sprawls. Beat your best scores.</span>
         <span class="mode-tag">Play</span>
       </a>
-      <div class="mode off" aria-disabled="true">
+      <a class="mode" href="#park" id="go-park">
         <span class="mode-name">The park</span>
-        <span class="mode-text">Walk the city, find gyms, buy gear, take pickup fights.</span>
-        <span class="mode-tag">Planned</span>
-      </div>
+        <span class="mode-text">Walk the street, train at the gym, buy gear and take pickup fights for cash and rep.</span>
+        <span class="mode-tag">Play</span>
+      </a>
       <div class="mode off" aria-disabled="true">
         <span class="mode-name">Story</span>
         <span class="mode-text">Amateur bouts to a title shot, with camps and rivals.</span>
@@ -53,6 +53,7 @@
           <select id="p-level"><option value="easy">Easy</option><option value="normal">Normal</option><option value="hard">Hard</option></select></div>
       </div>
       <div class="record"><span class="label">Record</span> <b id="p-record">0-0-0</b> <span class="muted">wins, losses, draws</span></div>
+      <div class="record"><span class="label">Park</span> <b id="p-cash">$0</b> <span class="muted" id="p-rep"></span></div>
       <ol class="history" id="p-history"></ol>
       <p class="muted small">Saved in this browser only.</p>
     </section>
@@ -61,7 +62,7 @@
   <!-- ===== Fight ===== -->
   <section class="screen" id="fight-screen" hidden>
     <div class="topbar">
-      <a class="back" href="#">&larr; Menu</a>
+      <a class="back" href="#" id="back">&larr; Menu</a>
       <span class="eyebrow" id="screen-label">Fight night &middot; 3 rounds</span>
     </div>
     <section class="training" id="training-panel" hidden>
@@ -73,6 +74,7 @@
       </div>
     </section>
     <div class="stage">
+      <div class="canvas-col">
       <div class="canvas-box" id="box">
         <canvas id="stage" aria-label="Two cel-shaded 3D MMA fighters and a referee in an octagon cage"></canvas>
         <div class="hud" id="hud">
@@ -84,7 +86,7 @@
           </div>
           <div class="mid"><div class="clock" id="clock"><small>R1</small>1:30</div><div class="pos" id="pos">Standing</div></div>
           <div class="side blue">
-            <span class="who"><small id="blue-style"></small>Blue</span>
+            <span class="who"><small id="blue-style"></small><span id="blue-name">Blue</span></span>
             <div class="meter hp"><i id="blue-hp"></i></div>
             <div class="meter sta"><i id="blue-sta"></i></div>
             <div class="dmg"><span>Body <b id="blue-body">0</b></span><span>Legs <b id="blue-legs">0</b></span></div>
@@ -99,8 +101,17 @@
         <div class="results" id="results" hidden>
           <div class="r-score"><span class="label" id="r-label">Score</span><b id="r-score">0</b><span id="r-best"></span></div>
           <p id="r-detail"></p>
-          <div class="row"><button type="button" id="r-retry">Go again</button><button type="button" id="r-pick">Pick another drill</button></div>
+          <p id="r-xp" class="r-xp" hidden></p>
+          <div class="row"><button type="button" id="r-retry">Go again</button><button type="button" id="r-pick">Pick another drill</button><button type="button" id="r-park" hidden>Back to the park</button></div>
         </div>
+        <div class="results" id="pickup-result" hidden>
+          <div class="r-score"><b id="pr-title"></b></div>
+          <div class="pr-pay"><span id="pr-cash"></span><span id="pr-rep"></span></div>
+          <p id="pr-detail"></p>
+          <div class="row"><button type="button" id="pr-park">Back to the park</button><button type="button" id="pr-again">Run it back</button></div>
+        </div>
+        <div class="park-hud" id="park-hud"></div>
+        <div class="park-prompt" id="park-prompt" hidden></div>
         <div class="tell" id="tell" hidden></div>
         <div class="banner" id="banner"></div>
         <div class="panel" id="timing" hidden>
@@ -113,6 +124,13 @@
         </div>
         <div class="status" id="status">Loading the 3D scene&hellip;</div>
       </div>
+      <div class="park-touch" id="park-touch">
+        <button type="button" id="pk-left" aria-label="Walk left">&#9664; Walk</button>
+        <button type="button" id="pk-enter" disabled>Enter</button>
+        <button type="button" id="pk-right" aria-label="Walk right">Walk &#9654;</button>
+      </div>
+      </div>
+      <section class="park-panel" id="park-panel" aria-live="polite"></section>
 
       <div class="prompt" id="prompt"></div>
       <div class="pads">
@@ -121,9 +139,9 @@
         <div class="group" id="evade-group"><span class="label">Head movement</span><div class="blockpad" id="evadepad"></div></div>
       </div>
       <div class="setup">
-        <div class="field"><label class="label" for="style-red">Your style</label><select id="style-red"></select></div>
-        <div class="field"><label class="label" for="style-blue">CPU style</label><select id="style-blue"></select></div>
-        <div class="field"><label class="label" for="level">CPU level</label>
+        <div class="field fight-only"><label class="label" for="style-red">Your style</label><select id="style-red"></select></div>
+        <div class="field fight-only"><label class="label" for="style-blue">CPU style</label><select id="style-blue"></select></div>
+        <div class="field fight-only"><label class="label" for="level">CPU level</label>
           <select id="level"><option value="easy">Easy</option><option value="normal">Normal</option><option value="hard">Hard</option></select></div>
         <label class="check" for="tells"><input type="checkbox" id="tells"> Show tells</label>
         <button type="button" id="restart">Restart fight</button>

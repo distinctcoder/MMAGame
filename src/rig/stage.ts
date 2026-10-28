@@ -14,7 +14,13 @@ export const PALETTES: Record<'red' | 'blue' | 'ref', Palette> = {
   blue: { skin: '#8d5b3d', shorts: '#2457b5', trim: '#f2f2f2', glove: '#23252b', cuff: '#2457b5', hair: '#0e0a08' }
 };
 
-export interface FighterMesh { update(st: RigState): void }
+export interface FighterMesh {
+  update(st: RigState): void;
+  /** Recolor the outfit (gear) without rebuilding the mesh. Shirt, pants and shoes are fixed at creation. */
+  setPalette(pal: Palette): void;
+  root: THREE.Group;
+}
+export type Venue = 'arena' | 'park' | 'court';
 export interface CagePanel { g: THREE.Group; normal: Vector3 }
 export interface Stage {
   renderer: THREE.WebGLRenderer;
@@ -22,8 +28,16 @@ export interface Stage {
   camera: THREE.PerspectiveCamera;
   panels: CagePanel[];
   outlines: THREE.Mesh[];
+  /** The cage. The park world adds its own groups. */
+  arena: THREE.Group;
   readColors(): void;
+  /** Run after the theme colors are read (light or dark), e.g. to recolor the park. */
+  onColors(fn: () => void): void;
   makeFighter(pal: Palette): FighterMesh;
+  toon(color: string): THREE.MeshToonMaterial;
+  ink: THREE.MeshBasicMaterial;
+  setVenue(v: Venue): void;
+  venue: Venue;
 }
 
 /** Build the renderer, lights, cage and materials on a canvas. Throws if WebGL is unavailable. */
@@ -49,13 +63,22 @@ export function createStage(canvas: HTMLCanvasElement): Stage {
     mat: toon('#e4e7ec'), ring: new THREE.MeshBasicMaterial({ color: '#c8232c' }), post: toon('#2c313b'), pad: toon('#2c313b'),
     fence: new THREE.LineBasicMaterial({ color: '#6b7385', transparent: true, opacity: 0.45 })
   };
+  const colorFns: (() => void)[] = [];
+  let venue: Venue = 'arena';
+  const arena = new THREE.Group();
+  scene.add(arena);
+  const fog = new THREE.Fog('#ffffff', 1700, 3600);
   function readColors() {
-    scene.background = new THREE.Color(cssVar('--wall') || '#d9dee6');
+    const bg = venue === 'arena' ? cssVar('--wall') || '#d9dee6' : cssVar('--sky') || '#bcd6ee';
+    scene.background = new THREE.Color(bg);
+    fog.color.set(bg);
+    scene.fog = venue === 'arena' ? null : fog;
     sceneMats.mat.color.set(cssVar('--mat') || '#e4e7ec');
     sceneMats.ring.color.set(cssVar('--mat-line') || '#c8232c');
     sceneMats.post.color.set(cssVar('--post') || '#2c313b');
     sceneMats.pad.color.set(cssVar('--post') || '#2c313b');
     sceneMats.fence.color.set(cssVar('--fence') || '#6b7385');
+    for (const fn of colorFns) fn();
   }
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', readColors);
   new MutationObserver(readColors).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
@@ -64,10 +87,10 @@ export function createStage(canvas: HTMLCanvasElement): Stage {
   const R = 330, panels: CagePanel[] = [];
   const floor = new THREE.Mesh(new THREE.CircleGeometry(R, 8, Math.PI / 8), sceneMats.mat);
   floor.rotation.x = -Math.PI / 2;
-  scene.add(floor);
+  arena.add(floor);
   const ring = new THREE.Mesh(new THREE.RingGeometry(92, 97, 64), sceneMats.ring);
   ring.rotation.x = -Math.PI / 2; ring.position.y = 0.3;
-  scene.add(ring);
+  arena.add(ring);
   for (let i = 0; i < 8; i++) {
     const a0 = Math.PI / 8 + i * Math.PI / 4, a1 = a0 + Math.PI / 4;
     const p0 = V(Math.cos(a0) * R, 0, Math.sin(a0) * R), p1 = V(Math.cos(a1) * R, 0, Math.sin(a1) * R);
@@ -98,7 +121,7 @@ export function createStage(canvas: HTMLCanvasElement): Stage {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
     g.add(new THREE.LineSegments(geo, sceneMats.fence));
-    scene.add(g);
+    arena.add(g);
     panels.push({ g, normal: V(mid.x, 0, mid.z).normalize() });
   }
 
@@ -117,10 +140,12 @@ export function createStage(canvas: HTMLCanvasElement): Stage {
       shirt: pal.shirt ? toon(pal.shirt) : skin, pants: pal.pants ? toon(pal.pants) : skin, shoe: pal.shoe ? toon(pal.shoe) : skin
     };
     const pieces: Piece[] = [];
+    const root = new THREE.Group();
+    scene.add(root);
     const mesh = (geo: THREE.BufferGeometry, mat: THREE.Material, outlineGeo: THREE.BufferGeometry | null): [THREE.Mesh, THREE.Mesh | null] => {
-      const a = new THREE.Mesh(geo, mat); scene.add(a);
+      const a = new THREE.Mesh(geo, mat); root.add(a);
       let o: THREE.Mesh | null = null;
-      if (outlineGeo) { o = new THREE.Mesh(outlineGeo, inkMat); scene.add(o); outlines.push(o); }
+      if (outlineGeo) { o = new THREE.Mesh(outlineGeo, inkMat); root.add(o); outlines.push(o); }
       return [a, o];
     };
     const seg = (a: keyof J, b: keyof J, r1: number, r2: number, mat: THREE.Material, frac = 1) => {
@@ -190,8 +215,17 @@ export function createStage(canvas: HTMLCanvasElement): Stage {
         return [j[an].clone().add(fd.multiplyScalar(6.5)).add(up.multiplyScalar(-1.5)), q];
       });
     }
-    return { update(st) { const j = joints(st); for (const p of pieces) p(j, st); } };
+    return {
+      root,
+      update(st) { const j = joints(st); for (const p of pieces) p(j, st); },
+      setPalette(p) { for (const k of ['skin', 'shorts', 'trim', 'glove', 'cuff', 'hair'] as const) m[k].color.set(p[k]); }
+    };
   }
 
-  return { renderer, scene, camera, panels, outlines, readColors, makeFighter };
+  return {
+    renderer, scene, camera, panels, outlines, arena, readColors, makeFighter, toon, ink: inkMat,
+    onColors(fn) { colorFns.push(fn); fn(); },
+    get venue() { return venue; },
+    setVenue(v) { venue = v; arena.visible = v !== 'park'; readColors(); }
+  };
 }

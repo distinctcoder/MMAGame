@@ -95,6 +95,8 @@ export class Hud {
       $(x.color + '-sta').style.width = x.sta + '%';
       $(x.color + '-body').textContent = String(Math.round(x.body));
       $(x.color + '-legs').textContent = String(Math.round(x.legs));
+      const name = $(x.color + '-name');
+      if (name.textContent !== x.name) name.textContent = x.name;
     }
     const c = Math.max(0, Math.ceil(f.clock / 1000));
     $('clock').innerHTML = `<small>R${f.round}</small>${Math.floor(c / 60)}:${String(c % 60).padStart(2, '0')}`;
@@ -153,7 +155,7 @@ export class Hud {
     }
     const pad = this.input.device === 'pad';
     let msg = '';
-    if (f.over) msg = 'Fight over. Restart to go again, or go back to the menu.';
+    if (f.over) msg = 'Fight over. Restart to go again, or use the back button above.';
     else if (f.timing) msg = `${f.timing.title} Press ${key('time')} when the needle is in the green.`;
     else if (f.sub) msg = `Mash ${key('time')} ${f.sub.att === me ? 'to finish it.' : 'to escape.'}`;
     else if (f.mode === 'stand') msg = `Strike, block with ${key('block')}${pad ? ' + stick' : ' + W/A/S/D'}, slip or duck with ${key('evade')}${pad ? '' : ' + W/A/S/D'}, clinch with ${key('clinch')} or shoot with ${key('shoot')}.`;

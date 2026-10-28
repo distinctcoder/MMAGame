@@ -32,6 +32,8 @@ interface Animated { shown: RigState | null; anim: Anim | null }
 
 export interface Fighter extends Animated {
   color: Color; name: string; style: string; mesh: FighterMesh;
+  /** The style's stats with any boosts from training and gear. */
+  stats: Style;
   x: number; z: number; fromX: number; toX: number; moveT0: number; moveDur: number;
   dir: 1 | -1; yaw: number;
   headMax: number; headHP: number; body: number; legs: number; sta: number;
@@ -81,8 +83,14 @@ export interface FightConfig {
   resetGround?: boolean; // after a takedown lands, both fighters reset to the feet
   startDist?: number;    // distance between the fighters at the start
   cpu?: CpuPlan;
+  rounds?: number;       // number of rounds (default 3)
+  roundMs?: number;      // round length in ms (default 90 s)
 }
-export interface FightSetup { redStyle: string; blueStyle: string; level: R.Level; redName?: string; config?: FightConfig }
+export interface FightSetup {
+  redStyle: string; blueStyle: string; level: R.Level; redName?: string; blueName?: string; config?: FightConfig;
+  /** Stat points added to each fighter's style, e.g. from park training and gear. */
+  redBoost?: R.Boost; blueBoost?: R.Boost;
+}
 
 /** Structured events for scoring (training drills, stats). */
 export type FightEvent =
@@ -117,7 +125,7 @@ export class Fight {
 
   constructor(meshes: Record<Color | 'ref', FighterMesh>, private ev: FightEvents) {
     const fighter = (color: Color, name: string): Fighter => ({
-      color, name, style: 'mma', mesh: meshes[color], x: 0, z: 0, fromX: 0, toX: 0, moveT0: 0, moveDur: 0, dir: 1, yaw: 90,
+      color, name, style: 'mma', stats: SD.styles.mma, mesh: meshes[color], x: 0, z: 0, fromX: 0, toX: 0, moveT0: 0, moveDur: 0, dir: 1, yaw: 90,
       headMax: 100, headHP: 100, body: 0, legs: 0, sta: 100, action: { type: 'idle', since: 0 }, queued: null,
       counterUntil: 0, counterMul: R.PARRY_COUNTER, dealt: 0, roundDealt: 0, shown: null, anim: null,
       bodyJoints: blankJoints(), nextThink: 0, plannedBlock: null, clinchUntil: 0
@@ -129,7 +137,9 @@ export class Fight {
 
   // ---------- Helpers ----------
   other(f: Fighter) { return f === this.red ? this.blue : this.red; }
-  style(f: Fighter): Style { return SD.styles[f.style]; }
+  style(f: Fighter): Style { return f.stats; }
+  private rounds() { return this.config.rounds ?? R.ROUNDS; }
+  private roundMs() { return this.config.roundMs ?? R.ROUND_MS; }
   isHuman(f: Fighter) { return f === this.red; }
   human() { return this.red; }
   roleOf(f: Fighter): Role { return f === this.top ? 'top' : 'bot'; }
@@ -145,10 +155,13 @@ export class Fight {
   start(setup: FightSetup) {
     this.gen++;
     this.red.style = setup.redStyle; this.blue.style = setup.blueStyle; this.level = setup.level;
+    this.red.stats = R.withBoost(SD.styles[setup.redStyle], setup.redBoost);
+    this.blue.stats = R.withBoost(SD.styles[setup.blueStyle], setup.blueBoost);
     this.config = setup.config || {};
     this.nextAttack = this.now + 1200;
     this.red.name = setup.redName || 'Red';
-    Object.assign(this, { over: false, busy: false, mode: 'stand', round: 1, clock: R.ROUND_MS, scale: 1, slowUntil: 0, koCam: null,
+    this.blue.name = setup.blueName || 'Blue';
+    Object.assign(this, { over: false, busy: false, mode: 'stand', round: 1, clock: this.roundMs(), scale: 1, slowUntil: 0, koCam: null,
       timing: null, sub: null, top: null, bot: null, pos: null, camOverride: null, nextShoot: this.now + 5000, scores: [] });
     const half = (this.config.startDist ?? 120) / 2;
     this.resetFighter(this.red, -half); this.resetFighter(this.blue, half);
@@ -157,7 +170,7 @@ export class Fight {
     Object.assign(this.ref, { x: 195, z: -120, yaw: -90, shown: null });
     this.moveRef('ref_stand');
     this.ev.tell(null);
-    if (!this.config.noClock) this.ev.log('Round 1', `${this.red.name} (${this.style(this.red).label}) vs Blue (${this.style(this.blue).label})`);
+    if (!this.config.noClock) this.ev.log('Round 1', `${this.red.name} (${this.style(this.red).label}) vs ${this.blue.name} (${this.style(this.blue).label})`);
     this.ev.changed();
   }
   private resetFighter(f: Fighter, x: number) {
@@ -818,16 +831,16 @@ export class Fight {
   private endRound() {
     const card = R.judgeRound(this.red.roundDealt, this.blue.roundDealt);
     this.scores.push(card);
-    this.ev.log(`End of round ${this.round}: judges score it ${card[0]}-${card[1]}`, `Damage this round: ${this.red.name} ${Math.round(this.red.roundDealt)}, Blue ${Math.round(this.blue.roundDealt)}`);
-    if (this.round >= R.ROUNDS) return this.decision();
+    this.ev.log(`End of round ${this.round}: judges score it ${card[0]}-${card[1]}`, `Damage this round: ${this.red.name} ${Math.round(this.red.roundDealt)}, ${this.blue.name} ${Math.round(this.blue.roundDealt)}`);
+    if (this.round >= this.rounds()) return this.decision();
     this.gen++;
     this.busy = false; this.timing = null; this.sub = null; this.camOverride = null;
     this.mode = 'break';
-    this.ev.banner('Round ' + (this.round + 1), `${this.red.name} ${card[0]} – ${card[1]} Blue this round`, 2200);
+    this.ev.banner('Round ' + (this.round + 1), `${this.red.name} ${card[0]} – ${card[1]} ${this.blue.name} this round`, 2200);
     const g = this.gen;
     setTimeout(() => {
       if (this.over || g !== this.gen) return;
-      this.round++; this.clock = R.ROUND_MS;
+      this.round++; this.clock = this.roundMs();
       this.red.x = -70; this.blue.x = 70;
       for (const f of [this.red, this.blue]) {
         f.moveDur = 0; f.roundDealt = 0; f.sta = R.maxStamina(f.body);
@@ -852,7 +865,7 @@ export class Fight {
       const w = r.winner === 'red' ? this.red : this.blue;
       if (this.mode === 'stand') { w.action = { type: 'done' }; this.stand(w, 'win', 700); }
       this.ev.banner('Decision', `${w.name} wins ${Math.max(r.red, r.blue)}–${Math.min(r.red, r.blue)} on the cards`, 0);
-      this.ev.log(w.name + ' wins by decision', `Judges: ${this.red.name} ${r.red}, Blue ${r.blue}`);
+      this.ev.log(w.name + ' wins by decision', `Judges: ${this.red.name} ${r.red}, ${this.blue.name} ${r.blue}`);
     }
     this.ev.ended(r.winner, 'Decision');
     this.ev.changed();

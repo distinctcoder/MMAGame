@@ -5,6 +5,21 @@ export type Rng = () => number;
 export const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const round1 = (v: number) => Math.round(v * 10) / 10;
 
+/** The trainable stats. range and aggression shape how the CPU fights and are not boosted. */
+export const STATS = ['power', 'speed', 'defense', 'chin', 'cardio', 'kicks', 'evasion', 'clinch', 'takedowns', 'td_defense', 'top', 'guard'] as const;
+export type Stat = typeof STATS[number];
+export type Boost = Partial<Record<Stat, number>>;
+/** Boosted stats stop at this. */
+export const STAT_CAP = 99;
+
+/** A style with boost points added to its stats, capped at STAT_CAP. */
+export function withBoost(style: Style, boost?: Boost): Style {
+  if (!boost) return style;
+  const out = { ...style };
+  for (const k of STATS) if (boost[k]) out[k] = Math.min(STAT_CAP, Math.max(style[k], style[k] + boost[k]!));
+  return out;
+}
+
 export const ROUND_MS = 90000;
 export const ROUNDS = 3;
 

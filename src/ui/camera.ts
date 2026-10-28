@@ -21,19 +21,31 @@ export class GameCamera {
     else if (low) { tPos = V(mid + 60, 110, 760); tLook = V(mid, 48, 0); fov = 17; }
     else { tPos = V(mid + 70, 128, 820); tLook = V(mid, 102, 0); fov = 17.5; }
 
+    this.follow(tPos, tLook, fov, rdt);
+    if (fight.shake > 0.2) {
+      this.camera.position.add(V(Math.random() * 2 - 1, Math.random() * 2 - 1, 0).multiplyScalar(fight.shake));
+      this.camera.lookAt(this.look);
+      fight.shake *= 0.86;
+    }
+    // Hide cage panels between the camera and the fighters.
+    const view = V(this.pos.x - this.look.x, 0, this.pos.z - this.look.z).normalize();
+    for (const p of this.panels) p.g.visible = p.normal.dot(view) < 0.35;
+  }
+
+  /** Ease toward a camera position, look-at point and field of view. */
+  follow(tPos: THREE.Vector3, tLook: THREE.Vector3, fov: number, rdt: number) {
     const k = 1 - Math.pow(0.004, rdt / 1000);
     this.pos.lerp(tPos, k); this.look.lerp(tLook, k);
     const cam = this.camera;
     cam.fov += (fov - cam.fov) * k;
     cam.position.copy(this.pos);
-    if (fight.shake > 0.2) {
-      cam.position.add(V(Math.random() * 2 - 1, Math.random() * 2 - 1, 0).multiplyScalar(fight.shake));
-      fight.shake *= 0.86;
-    }
     cam.lookAt(this.look);
     cam.updateProjectionMatrix();
-    // Hide cage panels between the camera and the fighters.
-    const view = V(this.pos.x - this.look.x, 0, this.pos.z - this.look.z).normalize();
-    for (const p of this.panels) p.g.visible = p.normal.dot(view) < 0.35;
+  }
+
+  /** Jump straight to a view, e.g. when switching screens. */
+  snap(pos: THREE.Vector3, look: THREE.Vector3, fov: number) {
+    this.pos.copy(pos); this.look.copy(look); this.camera.fov = fov;
+    this.follow(pos, look, fov, 0);
   }
 }
