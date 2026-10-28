@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Fight Night</title>
+  <meta name="claude:viewport-fit-sides" content="cover">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;600&display=swap">
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ===== Main menu ===== -->
+  <section class="screen" id="menu">
+    <header>
+      <div class="eyebrow">2D MMA</div>
+      <h1>Fight <span class="corner">night</span></h1>
+      <p class="lede">Toon-shaded MMA in the browser. Strike with zone blocks and head movement, fight in the clinch, shoot takedowns, and work the ground until someone taps, sleeps or hears the final bell.</p>
+    </header>
+
+    <div class="modes">
+      <a class="mode" href="#fight" id="go-fight">
+        <span class="mode-name">Fight</span>
+        <span class="mode-text">Three rounds against the CPU. Pick the styles below.</span>
+        <span class="mode-tag">Play</span>
+      </a>
+      <div class="mode off" aria-disabled="true">
+        <span class="mode-name">Training</span>
+        <span class="mode-text">Sparring partner, block and dodge drills, combo and takedown practice.</span>
+        <span class="mode-tag">Next up</span>
+      </div>
+      <div class="mode off" aria-disabled="true">
+        <span class="mode-name">The park</span>
+        <span class="mode-text">Walk the city, find gyms, buy gear, take pickup fights.</span>
+        <span class="mode-tag">Planned</span>
+      </div>
+      <div class="mode off" aria-disabled="true">
+        <span class="mode-name">Story</span>
+        <span class="mode-text">Amateur bouts to a title shot, with camps and rivals.</span>
+        <span class="mode-tag">Planned</span>
+      </div>
+    </div>
+
+    <section class="profile">
+      <h2>Your fighter</h2>
+      <div class="fields">
+        <div class="field"><label class="label" for="p-name">Name</label><input id="p-name" maxlength="18" autocomplete="off"></div>
+        <div class="field"><label class="label" for="p-style">Your style</label><select id="p-style"></select></div>
+        <div class="field"><label class="label" for="p-opp">Opponent style</label><select id="p-opp"></select></div>
+        <div class="field"><label class="label" for="p-level">CPU level</label>
+          <select id="p-level"><option value="easy">Easy</option><option value="normal">Normal</option><option value="hard">Hard</option></select></div>
+      </div>
+      <div class="record"><span class="label">Record</span> <b id="p-record">0-0-0</b> <span class="muted">wins, losses, draws</span></div>
+      <ol class="history" id="p-history"></ol>
+      <p class="muted small">Saved in this browser only.</p>
+    </section>
+  </section>
+
+  <!-- ===== Fight ===== -->
+  <section class="screen" id="fight-screen" hidden>
+    <div class="topbar">
+      <a class="back" href="#">&larr; Menu</a>
+      <span class="eyebrow">Fight night &middot; 3 rounds</span>
+    </div>
+    <div class="stage">
+      <div class="canvas-box" id="box">
+        <canvas id="stage" aria-label="Two cel-shaded 3D MMA fighters and a referee in an octagon cage"></canvas>
+        <div class="hud" id="hud">
+          <div class="side red">
+            <span class="who"><span id="red-name">Red</span><small id="red-style"></small></span>
+            <div class="meter hp"><i id="red-hp"></i></div>
+            <div class="meter sta"><i id="red-sta"></i></div>
+            <div class="dmg"><span>Body <b id="red-body">0</b></span><span>Legs <b id="red-legs">0</b></span></div>
+          </div>
+          <div class="mid"><div class="clock" id="clock"><small>R1</small>1:30</div><div class="pos" id="pos">Standing</div></div>
+          <div class="side blue">
+            <span class="who"><small id="blue-style"></small>Blue</span>
+            <div class="meter hp"><i id="blue-hp"></i></div>
+            <div class="meter sta"><i id="blue-sta"></i></div>
+            <div class="dmg"><span>Body <b id="blue-body">0</b></span><span>Legs <b id="blue-legs">0</b></span></div>
+          </div>
+        </div>
+        <div class="tell" id="tell" hidden></div>
+        <div class="banner" id="banner"></div>
+        <div class="panel" id="timing" hidden>
+          <div class="title"><span id="timing-title"></span><span id="timing-hint"></span></div>
+          <div class="track"><div class="zone" id="timing-zone"></div><div class="needle" id="timing-needle"></div></div>
+        </div>
+        <div class="panel" id="sub" hidden>
+          <div class="title"><span id="sub-title"></span><span id="sub-hint"></span></div>
+          <div class="tug"><i id="sub-fill"></i></div>
+        </div>
+        <div class="status" id="status">Loading the 3D scene&hellip;</div>
+      </div>
+
+      <div class="prompt" id="prompt"></div>
+      <div class="pads">
+        <div class="group"><div class="row" id="actions"></div></div>
+        <div class="group" id="block-group"><span class="label">Block</span><div class="blockpad" id="blockpad"></div></div>
+        <div class="group" id="evade-group"><span class="label">Head movement</span><div class="blockpad" id="evadepad"></div></div>
+      </div>
+      <div class="setup">
+        <div class="field"><label class="label" for="style-red">Your style</label><select id="style-red"></select></div>
+        <div class="field"><label class="label" for="style-blue">CPU style</label><select id="style-blue"></select></div>
+        <div class="field"><label class="label" for="level">CPU level</label>
+          <select id="level"><option value="easy">Easy</option><option value="normal">Normal</option><option value="hard">Hard</option></select></div>
+        <label class="check" for="tells"><input type="checkbox" id="tells"> Show tells</label>
+        <button type="button" id="restart">Restart fight</button>
+        <span class="device" id="device"><i></i><span id="device-text">Keyboard. Connect a PS5 controller and press any button.</span></span>
+      </div>
+    </div>
+
+    <div class="three">
+      <section><h2>Controls</h2><div class="table-wrap"><table id="controls"></table></div></section>
+      <section>
+        <h2>Defense chart</h2>
+        <p>Blocking is safe and lasts longer. Head movement is riskier: get it right and the strike misses completely, the attacker recovers slowly, and your counter comes out faster and hits harder than after a parry.</p>
+        <div class="table-wrap"><table id="defense"></table></div>
+      </section>
+      <section><h2>Fight log</h2><ol class="log" id="log"></ol></section>
+    </div>
+  </section>
+</div>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>

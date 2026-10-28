@@ -1,15 +1,55 @@
 # 2DMMAGame
 
-A 2D MMA game for the browser: striking, grappling, a referee, ring or cage, training mode, story mode and an open park mode for gear and training.
+A browser MMA game with toon-shaded 3D fighters that read as 2D art: striking with zone blocks and head movement, the clinch, three-phase takedowns, a ground game with sweeps and submissions, a referee, and three-round fights. Plays with keyboard, touch, or a PS5 DualSense.
 
-## Art pipeline
+## Getting started
 
-Fighters are built from body-part sprites on a skeleton rather than frame-by-frame sprite sheets.
+Requires Node 20 or newer.
 
-- `art/example-fighter/`: a working sample fighter (parts, rig, animations and a preview page). Run `npx serve art/example-fighter` and open the page.
-- `art/example-fighter/grappling.html`: grappling prototype with a 3-phase takedown (level change, grab, finish), guard, side control and mount, ground and pound with blocks, sweeps and a submission mini-game. Run the same server and open `/grappling.html`.
-- `art/toon-3d/`: toon-shaded 3D test (Three.js). Cel-shaded fighters that read as 2D from the side-on game camera, with cinematic angles for a rear-naked choke, armbar and triangle. Holds are authored as contact points and solved with two-bone IK (`poses.json`). Run `npx serve art/toon-3d`.
-- `art/toon-3d/striking.html`: striking prototype in the same toon 3D style. Seven strikes (jab, cross, both hooks, low, body and head kicks), each matched to a block zone (high guard, left or right side, body, check). Block with Space plus a direction; late blocks parry into a counter. Range, stamina, and head, body and leg damage, with a CPU opponent per style. Strikes, poses and styles live in `strikes.json`.
-- `art/toon-3d/fight.html`: the full fight. Striking with zone blocks and head movement (slips, ducks, sway back), uppercuts, the clinch (ties, knees, elbows, pummeling, trips), three-phase takedowns, guard, side control and mount with ground and pound, sweeps, getting up, triangle and armbar, knockdowns, a referee, and three rounds scored by judges. Plays with keyboard, touch, or a PS5 DualSense (Gamepad API, with rumble). Paired grappling poses live in `fight.json`.
-- `art/toon-3d/toon-rig.js`: the shared rig (IK, cel shading, cage, fighter meshes) used by both toon 3D pages.
-- `docs/SPRITE_SPEC.md`: what an artist needs to deliver for each fighter.
+```bash
+npm install          # .npmrc sets legacy-peer-deps, which avoids an npm bug with Vitest's optional peers
+npm run dev          # dev server with hot reload, usually http://localhost:5173
+npm test             # fight-rule and data tests
+npm run typecheck    # TypeScript only
+npm run build        # production build into dist/
+npm run build:artifact   # build, then write dist/artifact.html for publishing as a claude.ai artifact
+```
+
+## Project layout
+
+```
+index.html              app shell: main menu and fight screen
+src/main.ts             boot, menu, profile, screen switching, the frame loop
+src/styles.css          design tokens (light and dark) and layout
+src/data/               strikes.json, fight.json and their TypeScript types
+src/rig/math.ts         joints, frames and two-bone IK
+src/rig/stage.ts        renderer, cel shading, octagon cage, fighter meshes
+src/rig/poses.ts        turns pose specs into world-space poses (standing and paired)
+src/fight/rules.ts      pure fight rules: blocks, dodges, damage, timing, contests, judging
+src/fight/fight.ts      the fight state machine: standing, clinch, takedowns, ground, rounds, referee
+src/fight/cpu.ts        CPU opponent
+src/input/input.ts      keyboard and gamepad mapped to fight commands, rumble, control labels
+src/ui/hud.ts           HUD, prompts, contextual buttons, controls and defense charts
+src/ui/camera.ts        game camera
+src/profile/profile.ts  your fighter (name, styles, record), saved in the browser
+tests/                  rules.test.ts (fight rules) and data.test.ts (data integrity)
+```
+
+The fight logic never touches the DOM. It reports what happened through the `FightEvents` interface (pops, banners, log lines, rumble), which the HUD and input modules implement. That keeps the rules testable and lets new screens, such as training mode, drive the same fight.
+
+## Tuning the game
+
+Most tuning is data, not code:
+
+- **`src/data/strikes.json`**: strikes (windup, damage, range, stamina cost, which block or head movement beats them), standing poses, and styles (stats and strike mix for the CPU).
+- **`src/data/fight.json`**: paired poses for the clinch, takedowns, ground positions and submissions.
+- **`src/fight/rules.ts`**: the formulas and constants (block table, counter windows, damage scaling, contest math, judging).
+
+`npm test` checks that every strike, pose, zone and style the data refers to exists and that every pose solves, so typos fail fast.
+
+## Prototypes
+
+`art/` holds the earlier single-page prototypes, kept as reference. They are not part of the build.
+
+- `art/example-fighter/`: the 2D sprite-rig sample and the 2D grappling lab, plus the sprite spec in `docs/SPRITE_SPEC.md`.
+- `art/toon-3d/`: the toon 3D test, the striking lab and the original single-file fight.

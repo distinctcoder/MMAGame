@@ -1,0 +1,24 @@
+{
+  "name": "2d-mma-game",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "A browser MMA game with toon-shaded 3D fighters: striking, clinch, takedowns and a ground game.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "build:artifact": "npm run build && node scripts/artifact.mjs"
+  },
+  "dependencies": {
+    "three": "0.160.0"
+  },
+  "devDependencies": {
+    "@types/three": "0.160.0",
+    "typescript": "5.9.3",
+    "vite": "7.3.7",
+    "vitest": "4.1.12"
+  }
+}

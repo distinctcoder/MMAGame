@@ -1,0 +1,179 @@
+{
+  "notes": "Paired poses for the full fight, in one shared frame: the 'top' fighter (the one shooting, or on top) faces +x and the 'bot' fighter faces -x, with the middle of the pair near x = 0. The game rotates the whole pair 180 degrees when the top fighter faces the other way. Targets work as in poses.json, plus {hc} (offset from the fighter's own upper chest in their facing frame) and {h} (a point on the mat around the fighter's hips). References use 'top.' and 'bot.'. Ground positions carry overlays that change a few bones for ground and pound, blocks, hits and escape attempts. Submissions marked 'flip' were authored with the top fighter facing -x.",
+  "pairs": {
+    "level": {
+      "order": ["bot", "top"],
+      "top": {"pelvis": [-50, 62, 0], "rot": [30, 90, 0], "spine": [10, 0, 0], "head": [-35, 0, 0], "lh": {"c": [8, -20, 30]}, "rh": {"c": [-8, -20, 26]}, "lf": [-20, 7, -12], "rf": [-95, 7, 12], "rfp": {"w": [1, -1, 0]}},
+      "bot": {"pelvis": [55, 92, 0], "rot": [0, -90, 0], "spine": [10, -30, 0], "head": [-6, 26, 0], "lh": {"hc": [5, 13, 24]}, "rh": {"hc": [-7, 11, 13]}, "lf": {"h": [9, 7, 22]}, "rf": {"h": [-12, 7, -20]}}
+    },
+    "stuffed": {
+      "order": ["bot", "top"],
+      "top": {"pelvis": [-70, 88, 0], "rot": [5, 90, 0], "spine": [12, -25, 0], "head": [-6, 22, 0], "lh": {"hc": [5, 13, 22]}, "rh": {"hc": [-7, 11, 13]}, "lf": {"h": [9, 7, 22]}, "rf": {"h": [-12, 7, -20]}},
+      "bot": {"pelvis": [42, 86, 0], "rot": [20, -90, 0], "spine": [10, -10, 0], "head": [-10, 10, 0], "lh": {"j": "top.head", "o": [0, 6, 4]}, "rh": {"j": "top.head", "o": [-6, 2, 6]}, "lf": {"h": [9, 7, 18]}, "rf": {"h": [-12, 7, -26]}}
+    },
+    "shot": {
+      "order": ["bot", "top"],
+      "top": {"pelvis": [-14, 50, 0], "rot": [55, 90, 0], "spine": [5, 0, 0], "head": [-45, 0, 0], "lh": {"j": "bot.pelvis", "o": [-12, -18, -12]}, "rh": {"j": "bot.pelvis", "o": [12, -18, -12]}, "lhp": {"w": [0, 0, -1]}, "rhp": {"w": [0, 0, 1]}, "lf": [24, 7, -8], "rf": [-62, 6, 10], "rfp": {"w": [1, -1, 0]}, "fd": [1, 0, 0]},
+      "bot": {"pelvis": [52, 92, 0], "rot": [-8, -90, 0], "spine": [15, -10, 0], "head": [10, 10, 0], "lh": {"j": "top.chest", "o": [-8, 14, -4]}, "rh": {"j": "top.chest", "o": [8, 14, -4]}, "lf": {"h": [9, 7, 22]}, "rf": {"h": [-12, 7, -20]}}
+    },
+    "sprawl": {
+      "order": ["top", "bot"],
+      "top": {"pelvis": [-30, 46, 0], "rot": [70, 90, 0], "spine": [10, 0, 0], "head": [-20, 0, 0], "lh": [12, 6, -14], "rh": [12, 6, 14], "lf": [-72, 6, -12], "rf": [-72, 6, 12], "lfp": {"w": [1, -1, 0]}, "rfp": {"w": [1, -1, 0]}, "fd": [-1, -0.3, 0]},
+      "bot": {"pelvis": [40, 42, 0], "rot": [65, -90, 0], "spine": [5, 0, 0], "head": [-15, 0, 0], "lh": {"j": "top.chest", "o": [8, 12, -10]}, "rh": {"j": "top.chest", "o": [-8, 12, -10]}, "lf": [125, 6, 14], "rf": [125, 6, -14], "lfp": {"w": [0, -1, 0]}, "rfp": {"w": [0, -1, 0]}}
+    },
+    "drive": {
+      "order": ["bot", "top"],
+      "top": {"pelvis": [15, 70, 0], "rot": [60, 90, 0], "spine": [5, 0, 0], "head": [-40, 0, 0], "lh": {"j": "bot.pelvis", "o": [-12, -10, -12]}, "rh": {"j": "bot.pelvis", "o": [12, -10, -12]}, "lhp": {"w": [0, 0, -1]}, "rhp": {"w": [0, 0, 1]}, "lf": [45, 7, -10], "rf": [-30, 7, 12]},
+      "bot": {"pelvis": [62, 52, 0], "rot": [-50, -90, 0], "spine": [10, 0, 0], "head": [25, 0, 0], "lh": {"c": [22, 20, 20]}, "rh": {"c": [-22, 18, 22]}, "lf": [30, 40, 14], "rf": [38, 30, -14], "lfp": {"w": [0, 1, 0]}, "rfp": {"w": [0, 1, 0]}}
+    },
+    "guard": {
+      "order": ["top", "bot"],
+      "label": "Closed guard",
+      "top": {"pelvis": [-2, 48, 0], "rot": [15, 90, 0], "spine": [10, 0, 0], "head": [-10, 0, 0], "lh": {"j": "bot.abd", "o": [-9, 12, 0]}, "rh": {"j": "bot.abd", "o": [9, 12, 0]}, "lf": [-45, 6, -12], "rf": [-45, 6, 12], "lfp": {"w": [1, -0.5, 0]}, "rfp": {"w": [1, -0.5, 0]}, "fd": [-1, -0.2, 0]},
+      "bot": {"pelvis": [24, 12, 0], "rot": [-90, -90, 0], "spine": [10, 0, 0], "head": [20, 0, 0], "lh": {"j": "top.chest", "o": [-14, -6, 4]}, "rh": {"j": "top.chest", "o": [14, -6, 4]}, "lhp": {"w": [0, -1, 0]}, "rhp": {"w": [0, -1, 0]}, "lf": {"j": "top.pelvis", "o": [6, 10, -16]}, "rf": {"j": "top.pelvis", "o": [-6, 6, -18]}, "lfp": {"w": [0, 0.6, 1]}, "rfp": {"w": [0, 0.6, -1]}},
+      "overlays": {
+        "top_cock": {
+          "top": {"spine": [0, 0, 0], "rh": {"c": [-12, 16, -10]}}
+        },
+        "top_punch": {
+          "top": {"spine": [25, 0, 0], "rh": {"j": "bot.head", "o": [0, 9, 0]}}
+        },
+        "bot_block": {
+          "bot": {"head": [30, 0, 0], "lh": {"c": [6, 18, 14]}, "rh": {"c": [-6, 18, 14]}}
+        },
+        "bot_hit": {
+          "bot": {"head": [-5, 25, 0]}
+        },
+        "bot_try": {
+          "bot": {"pelvis": [24, 20, 0], "rot": [-75, -90, 0]}
+        }
+      }
+    },
+    "side": {
+      "order": ["bot", "top"],
+      "label": "Side control",
+      "bot": {"pelvis": [-10, 12, 0], "rot": [-90, -90, 0], "spine": [5, 0, 0], "head": [10, 0, 0], "lh": {"j": "top.neck", "o": [0, 0, 6]}, "rh": {"j": "top.pelvis", "o": [0, 0, 12]}, "lf": [-55, 6, 12], "rf": [-55, 6, -12], "lfp": {"w": [0, 1, 0]}, "rfp": {"w": [0, 1, 0]}},
+      "top": {"pelvis": [25, 32, -45], "rot": [75, 0, 0], "spine": [5, 0, 0], "head": [-20, 0, 0], "lh": {"j": "bot.head", "o": [-14, -6, 0]}, "rh": {"j": "bot.pelvis", "o": [14, 4, 0]}, "lf": [37, 6, -82], "rf": [13, 6, -82], "lfp": {"w": [0, -0.5, 1]}, "rfp": {"w": [0, -0.5, 1]}, "fd": [0, -0.2, -1]},
+      "overlays": {
+        "top_cock": {
+          "top": {"spine": [-15, 0, 0], "rh": {"c": [-12, 18, -6]}}
+        },
+        "top_punch": {
+          "top": {"spine": [10, 0, 0], "rh": {"j": "bot.head", "o": [0, 9, 0]}}
+        },
+        "bot_block": {
+          "bot": {"head": [30, 0, 0], "lh": {"c": [6, 18, 14]}, "rh": {"c": [-6, 18, 14]}}
+        },
+        "bot_hit": {
+          "bot": {"head": [-5, 25, 0]}
+        },
+        "bot_try": {
+          "bot": {"pelvis": [-10, 20, 4], "rot": [-80, -90, 12]}
+        }
+      }
+    },
+    "mount": {
+      "order": ["bot", "top"],
+      "label": "Mount",
+      "bot": {"pelvis": [-30, 12, 0], "rot": [-90, -90, 0], "spine": [5, 0, 0], "head": [10, 0, 0], "lh": {"j": "top.chest", "o": [-12, -14, 6]}, "rh": {"j": "top.chest", "o": [12, -14, 6]}, "lhp": {"w": [0, -1, 0]}, "rhp": {"w": [0, -1, 0]}, "lf": [-82, 6, 12], "rf": [-82, 6, -12], "lfp": {"w": [0, 1, 0]}, "rfp": {"w": [0, 1, 0]}},
+      "top": {"pelvis": [-6, 40, 0], "rot": [5, 90, 0], "spine": [5, 0, 0], "head": [-8, 0, 0], "lh": {"j": "bot.chest", "o": [-8, 10, 6]}, "rh": {"c": [-8, 10, 18]}, "lf": [-45, 6, -18], "rf": [-45, 6, 18], "lfp": {"w": [0.6, -1, -0.5]}, "rfp": {"w": [0.6, -1, 0.5]}, "fd": [-1, -0.2, 0]},
+      "overlays": {
+        "top_cock": {
+          "top": {"spine": [-5, 0, 0], "rh": {"c": [-12, 16, -10]}}
+        },
+        "top_punch": {
+          "top": {"spine": [25, 0, 0], "rh": {"j": "bot.head", "o": [0, 9, 0]}}
+        },
+        "bot_block": {
+          "bot": {"head": [30, 0, 0], "lh": {"c": [6, 18, 14]}, "rh": {"c": [-6, 18, 14]}}
+        },
+        "bot_hit": {
+          "bot": {"head": [-5, 25, 0]}
+        },
+        "bot_try": {
+          "bot": {"pelvis": [-30, 22, 0], "rot": [-80, -90, 0], "lf": [-60, 6, 12], "rf": [-60, 6, -12]}
+        }
+      }
+    },
+    "clinch": {
+      "order": ["bot", "top"],
+      "label": "Clinch",
+      "top": {"pelvis": [-26, 90, 0], "rot": [0, 90, 0], "spine": [14, 0, 0], "head": [-8, 0, 0], "lh": {"j": "bot.head", "o": [-5, -3, -9]}, "rh": {"j": "bot.head", "o": [5, -3, -9]}, "lhp": {"w": [0, -1, 0]}, "rhp": {"w": [0, -1, 0]}, "lf": {"h": [9, 7, 16]}, "rf": {"h": [-12, 7, -24]}},
+      "bot": {"pelvis": [26, 86, 0], "rot": [0, -90, 0], "spine": [30, 0, 0], "head": [-20, 0, 0], "lh": {"j": "top.chest", "o": [-12, -16, -10]}, "rh": {"j": "top.chest", "o": [12, -16, -10]}, "lhp": {"w": [0, -1, 0]}, "rhp": {"w": [0, -1, 0]}, "lf": {"h": [9, 7, 14]}, "rf": {"h": [-12, 7, -26]}},
+      "overlays": {
+        "knee_cock": {
+          "top": {"rf": {"h": [-12, 22, -14]}, "rfp": [0, 0.2, 1]},
+          "bot": {"rf": {"h": [-12, 22, -14]}, "rfp": [0, 0.2, 1]}
+        },
+        "knee": {
+          "top": {"rot": [-6, 90, 0], "rf": {"h": [-4, 40, 10]}, "rfp": [0, 0.4, 1]},
+          "bot": {"rot": [-6, -90, 0], "rf": {"h": [-4, 40, 10]}, "rfp": [0, 0.4, 1]}
+        },
+        "elbow_cock": {
+          "top": {"spine": [14, -25, 0], "rh": {"hc": [-14, 16, -2]}},
+          "bot": {"spine": [30, -25, 0], "rh": {"hc": [-14, 16, -2]}}
+        },
+        "elbow": {
+          "top": {"spine": [18, 30, 0], "rh": {"hc": [8, 14, 6]}, "rhp": [0, 0.3, 1]},
+          "bot": {"spine": [30, 30, 0], "rh": {"hc": [8, 14, 6]}, "rhp": [0, 0.3, 1]}
+        },
+        "hitbody": {
+          "top": {"spine": [34, 0, 0], "pelvis": [-30, 84, 0]},
+          "bot": {"spine": [45, 0, 0], "pelvis": [28, 80, 0]}
+        },
+        "hithead": {
+          "top": {"head": [-30, 0, 0], "spine": [4, 0, 0]},
+          "bot": {"head": [-38, 0, 0], "spine": [18, 0, 0]}
+        },
+        "blockbody": {
+          "top": {"lh": {"j": "bot.pelvis", "o": [-8, 4, 10]}, "rh": {"j": "bot.pelvis", "o": [8, 4, 10]}},
+          "bot": {"lh": {"j": "top.pelvis", "o": [-8, 4, 10]}, "rh": {"j": "top.pelvis", "o": [8, 4, 10]}}
+        },
+        "blockhigh": {
+          "top": {"lh": {"hc": [4, 22, 12]}, "rh": {"hc": [-4, 22, 12]}, "head": [10, 0, 0]},
+          "bot": {"lh": {"hc": [4, 22, 12]}, "rh": {"hc": [-4, 22, 12]}, "head": [0, 0, 0]}
+        },
+        "pummel": {
+          "top": {"pelvis": [-22, 88, 4], "spine": [20, 0, 10]},
+          "bot": {"pelvis": [22, 88, -4], "spine": [22, 0, -10]}
+        }
+      }
+    }
+  },
+  "subs": {
+    "triangle": {
+      "label": "Triangle choke",
+      "by": "bot",
+      "flip": true,
+      "order": ["bot", "top"],
+      "center": [5, 0, 0],
+      "cine": {"pos": [-60, 170, 330], "look": [0, 35, 0], "fov": 30},
+      "loose": {
+        "top": {"pelvis": [42, 36, 0], "rot": [50, -90, 0], "spine": [30, 0, 0], "head": [20, 0, 0], "lh": [-25, 6, 32], "lhp": {"w": [0.3, 0.4, 1]}, "rh": [-48, 28, 12], "rhp": {"w": [0, 1, -1]}, "lf": [85, 6, 13], "rf": [85, 6, -13], "lfp": {"w": [-1, -0.6, 0]}, "rfp": {"w": [-1, -0.6, 0]}, "fd": [1, -0.2, 0]},
+        "bot": {"pelvis": [0, 18, 0], "rot": [-95, 90, 0], "spine": [18, 0, 0], "head": [22, 0, 0], "lh": {"j": "top.head", "o": [0, 10, 4]}, "lhp": {"w": [0, 0, -1]}, "rh": {"j": "top.rwr", "o": [0, 2, 0]}, "rhp": {"w": [0, 0, 1]}, "rf": {"j": "top.neck", "o": [-12, 6, -10]}, "rfp": {"w": [0.3, 1, 0.6]}, "lf": {"j": "top.neck", "o": [12, -4, -16]}, "lfp": {"w": [0.3, 1, -0.6]}}
+      },
+      "tight": {
+        "top": {"pelvis": [40, 33, 0], "head": [30, 0, 0]},
+        "bot": {"pelvis": [0, 22, 0], "head": [30, 0, 0], "rf": {"j": "top.neck", "o": [-10, 4, -8]}}
+      }
+    },
+    "armbar": {
+      "label": "Armbar",
+      "by": "top",
+      "flip": true,
+      "order": ["bot", "top"],
+      "center": [-30, 0, -20],
+      "cine": {"pos": [-240, 200, 200], "look": [-38, 20, -20], "fov": 28},
+      "loose": {
+        "top": {"pelvis": [-36, 12, -38], "rot": [-90, 0, 0], "spine": [15, 0, 0], "head": [20, 0, 0], "lh": {"j": "bot.lwr", "o": [6, 2, 0]}, "lhp": {"w": [1, 0, 0]}, "rh": {"j": "bot.lwr", "o": [-6, 2, 0]}, "rhp": {"w": [-1, 0, 0]}, "rf": [-66, 8, 40], "rfp": {"w": [0, 1, 0.4]}, "lf": [-14, 8, 42], "lfp": {"w": [0, 1, 0.4]}},
+        "bot": {"pelvis": [10, 11, 0], "rot": [-90, 90, 0], "spine": [0, 0, 0], "head": [10, 0, 0], "lh": {"c": [52, -5, 30]}, "lhp": {"w": [0, 1, 0]}, "rh": {"c": [24, 2, 26]}, "rhp": {"w": [0, 1, 0.5]}, "lf": [70, 7, -16], "rf": [70, 7, 16], "lfp": {"w": [0, 1, 0]}, "rfp": {"w": [0, 1, 0]}}
+      },
+      "tight": {
+        "top": {"pelvis": [-36, 18, -40], "spine": [8, 0, 0], "head": [26, 0, 0]},
+        "bot": {"lh": {"c": [60, -5, 34]}, "head": [0, 0, 0], "rh": {"c": [30, 4, 30]}}
+      }
+    }
+  },
+  "positions": ["guard", "side", "mount"],
+  "sub_from": {"guard": "triangle", "mount": "armbar"}
+}
