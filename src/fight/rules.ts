@@ -113,6 +113,125 @@ export function defend(s: Strike, d: Defense): DefenseOutcome {
   return { result: 'hit', mult: 1 };
 }
 
+// ---------- Free-form defense: a guard held in zones, and head movement as a lean ----------
+/** How much of the guard sits in each zone, 0 to 1; the weights add up to at most 1. */
+export type Guard = Partial<Record<Zone, number>>;
+/** Head movement: x from slip left (-1) to slip right (1), y from duck (-1) to sway back (1). */
+export interface Lean { x: number; y: number }
+/** Guard weight needed in the right zone for a full block. */
+export const FULL_GUARD = 0.7;
+
+/** How far the head has moved in each evade direction, 0 to 1. */
+export function leanAmounts(l: Lean): Record<EvadeKind, number> {
+  return { slip_left: Math.max(0, -l.x), slip_right: Math.max(0, l.x), duck: Math.max(0, -l.y), sway: Math.max(0, l.y) };
+}
+const smooth = (u: number) => { const v = clamp(u, 0, 1); return v * v * (3 - 2 * v); };
+/**
+ * The damage multiplier from where the head is. Each lean direction scales its entry in the strike's evade table:
+ * a full slip under a jab is 0 (a clean miss), half a slip a graze, slipping into a hook makes it worse.
+ */
+export function evadeMult(s: Strike, l: Lean): number {
+  const amt = leanAmounts(l);
+  let best = 1, worst = 1;
+  for (const k of Object.keys(amt) as EvadeKind[]) {
+    const m = s.evade?.[k];
+    if (m === undefined || amt[k] <= 0) continue;
+    const v = 1 + (m - 1) * smooth((amt[k] - 0.2) / 0.65);
+    if (v < best) best = v;
+    if (v > worst) worst = v;
+  }
+  return best * worst;
+}
+/** The damage multiplier from the guard: each zone's weight blocks what that zone covers. */
+export function guardMult(s: Strike, g: Guard): number {
+  let held = 0, m = 0;
+  for (const z of Object.keys(g) as Zone[]) {
+    const w = g[z] || 0;
+    if (w <= 0) continue;
+    held += w;
+    const cover = BLOCK_TABLE[s.zone][z];
+    m += w * (cover === undefined ? 1 : cover === 0 && s.kick ? KICK_THROUGH : cover);
+  }
+  return m + Math.max(0, 1 - held);
+}
+/**
+ * Resolve a strike against a held guard and a lean. `fresh` means the right guard went up within the parry window.
+ * The better of the two defenses decides the result; partial guard and partial lean stack.
+ */
+export function resolveDefense(s: Strike, g: Guard, l: Lean, fresh: boolean): DefenseOutcome {
+  const em = evadeMult(s, l), right = g[s.zone] || 0;
+  if (em <= 0.1) return { result: 'dodged', mult: 0, counterMul: DODGE_COUNTER };
+  if (right >= FULL_GUARD) {
+    if (s.zone === 'low') return { result: 'checked', mult: 0 };
+    const mult = (s.kick ? KICK_THROUGH : 0) * em;
+    return fresh ? { result: 'parried', mult, counterMul: PARRY_COUNTER } : { result: 'blocked', mult };
+  }
+  const mult = Math.round(guardMult(s, g) * em * 100) / 100;
+  if (mult > 1.02) return { result: 'into', mult };
+  if (em < 0.9) return { result: 'grazed', mult };
+  if (mult < 0.9) return { result: 'partial', mult };
+  return { result: 'hit', mult: 1 };
+}
+/** Leaning and guarding speed (units per second): better head movement and defense move faster. */
+export const leanSpeed = (style: Style) => 5.5 + style.evasion / 20;
+export const guardSpeed = (style: Style) => 7 + style.defense / 20;
+/** Stamina per second while holding a deep lean or a guard. */
+export const HOLD_COST = 2.5;
+
+// ---------- Footwork ----------
+/** Strikes thrown with the rear hand; the rest come off the lead side. */
+export const REAR_HAND = new Set(['cross', 'rear_hook']);
+/** Turning to face the opponent after they move: how long before you react (ms), then how fast (degrees per second). */
+export const turnDelay = (style: Style, levelDef = 0, human = false) => human ? 200 : clamp(600 - (style.defense + levelDef) * 2.4, 260, 680);
+/** Turning back to face someone means pivoting the feet, so it is not instant. */
+export const turnRate = (style: Style) => 60 + style.speed * 0.6;
+/** How long after a step in the lead foot counts as planted (ms). */
+export const PLANTED_MS = 380;
+
+export interface Footing {
+  dist: number;
+  /** How far the attacker is turned away from the target, degrees. */
+  attErr: number;
+  /** How far the defender is turned away from the attacker, degrees. */
+  defErr: number;
+  /** Where the attacker stands in the defender's frame, cm: positive is the defender's lead-foot side (outside it). */
+  side: number;
+  planted: boolean;
+  backing: boolean;
+}
+export interface FootworkMods { dmg: number; leak: number; offTarget: boolean; tags: string[] }
+
+/**
+ * What footwork does to a strike: distance against the strike's sweet spot, angles, the lead foot outside the
+ * opponent's, and punching off a planted lead foot or while backing up. `leak` is the chance a correct block only
+ * partly stops it.
+ */
+export function footwork(key: string, s: Strike, f: Footing): FootworkMods {
+  const tags: string[] = [];
+  let dmg = 1, leak = 0;
+  // Range: power peaks a bit inside full reach. Reaching or jammed loses some.
+  const span = s.range[1] - s.range[0], ideal = s.range[0] + span * 0.7, dev = (f.dist - ideal) / span;
+  dmg *= clamp(1 - 0.55 * dev * dev, 0.7, 1);
+  if (dev > 0.25) tags.push('Reaching');
+  else if (dev < -0.6) tags.push('Jammed');
+  // Throwing while turned away from the target.
+  if (f.attErr > 50) return { dmg: 0, leak: 0, offTarget: true, tags: ['Off target'] };
+  dmg *= 1 - 0.35 * clamp((f.attErr - 12) / 38, 0, 1);
+  // Hitting a fighter who hasn't turned to face you.
+  const angle = clamp((f.defErr - 5) / 22, 0, 1);
+  if (angle > 0) { dmg *= 1 + 0.25 * angle; leak += 0.55 * angle; if (angle > 0.3) tags.push('Angle'); }
+  // Lead foot outside theirs lines up the rear hand; inside favors the lead hand.
+  if (!s.kick) {
+    const rear = REAR_HAND.has(key);
+    if (f.side > 12 && rear) { dmg *= 1.15; leak += 0.15; tags.push('Outside foot'); }
+    else if (f.side < -12 && !rear) { dmg *= 1.08; leak += 0.08; }
+    else if (f.side < -12 && rear) dmg *= 0.92;
+  }
+  if (f.planted) { dmg *= 1.12; leak += 0.1; tags.push('Planted'); }
+  else if (f.backing) { dmg *= 0.8; tags.push('Back foot'); }
+  return { dmg, leak: clamp(leak, 0, 0.8), offTarget: false, tags };
+}
+
 export interface DamageMods { counter?: boolean; counterMul?: number; gassed?: boolean }
 /** Strike damage. roll in [0, 1) gives the plus or minus 10% spread. */
 export function strikeDamage(s: Strike, style: Style, mult: number, m: DamageMods, roll: number) {

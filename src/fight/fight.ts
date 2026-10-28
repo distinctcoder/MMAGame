@@ -2,7 +2,7 @@
 // Rendering and the DOM stay outside; this module talks to them through FightEvents.
 import { FD, SD } from '../data';
 import type { EvadeKind, Position, Role, Strike, Style, Zone } from '../data/types';
-import { blendState, bodyJoints, clamp, cloneJoints, ease, qEuler, V, add, type Joints, type RigState, type Vector3 } from '../rig/math';
+import { blendState, bodyJoints, clamp, cloneJoints, ease, qEuler, rot, V, add, type Joints, type RigState, type Vector3 } from '../rig/math';
 import { PairPoses, resolveStand, standSpec, toWorld, type Opponent } from '../rig/poses';
 import type { FighterMesh } from '../rig/stage';
 import * as R from './rules';
@@ -16,17 +16,17 @@ export type PopKind = 'hit' | 'block' | 'miss' | 'gold';
 export interface StrikeAction {
   type: 'strike'; key: string; s: Strike; phase: 'wind' | 'extend' | 'hold' | 'recover';
   tHit: number; counter: boolean; counterMul: number; gassed: boolean; aim: Joints;
+  /** How far the striker was turned away from the target when they threw, degrees. */
+  attErr: number;
   recoverMul: number; tRecover: number; tEnd: number;
 }
 export type Action =
   | { type: 'idle'; since: number }
   | StrikeAction
-  | { type: 'block'; zone: Zone; t0: number; tEnd: number }
-  | { type: 'evade'; kind: EvadeKind; t0: number; tActive: number; tEnd: number; back: boolean }
   | { type: 'step' | 'stun'; tEnd: number }
   | { type: 'grapple' | 'down' | 'done' };
 
-interface Queued { kind: 'strike' | 'block' | 'evade' | 'shoot'; key?: string; zone?: string; at: number }
+interface Queued { kind: 'strike' | 'shoot'; key?: string; at: number }
 export interface Plan { at: number; zone?: Zone; evade?: EvadeKind }
 interface Anim { from: RigState | null; fn: () => RigState; t0: number; dur: number }
 interface Animated { shown: RigState | null; anim: Anim | null }
@@ -35,8 +35,17 @@ export interface Fighter extends Animated {
   color: Color; name: string; style: string; mesh: FighterMesh;
   /** The style's stats with any boosts from training and gear. */
   stats: Style;
-  x: number; z: number; fromX: number; toX: number; moveT0: number; moveDur: number;
+  x: number; z: number; fromX: number; toX: number; fromZ: number; toZ: number; moveT0: number; moveDur: number;
   dir: 1 | -1; yaw: number;
+  /** The last step: in, out or to the side, and when it finished. A planted lead foot adds power. */
+  stepKind: 'in' | 'out' | 'side' | null; stepEnd: number;
+  /** When this fighter first saw they were turned away from the opponent (0 when facing them). */
+  turnSince: number;
+  /** The guard (weight per zone) and head lean, easing toward their targets. */
+  guard: R.Guard; guardTarget: Zone | null; guardSince: number;
+  lean: R.Lean; leanTarget: R.Lean;
+  /** Taps (touch buttons, the CPU) hold a guard or lean until this time. */
+  holdUntil: number;
   headMax: number; headHP: number; body: number; legs: number; sta: number;
   action: Action; queued: Queued | null;
   counterUntil: number; counterMul: number;
@@ -103,6 +112,8 @@ export type FightEvent =
   | { type: 'shoot'; attacker: Color };
 
 class Abort extends Error {}
+/** An angle folded into -180..180 degrees. */
+const wrapDeg = (a: number) => ((a + 540) % 360) - 180;
 
 const blankJoints = (): Joints => bodyJoints({ P: V(), Qp: qEuler(), Qc: qEuler(), Qh: qEuler(), Qy: qEuler() });
 
@@ -129,7 +140,8 @@ export class Fight {
 
   constructor(meshes: Record<Color | 'ref', FighterMesh>, private ev: FightEvents) {
     const fighter = (color: Color, name: string): Fighter => ({
-      color, name, style: 'mma', stats: SD.styles.mma, mesh: meshes[color], x: 0, z: 0, fromX: 0, toX: 0, moveT0: 0, moveDur: 0, dir: 1, yaw: 90,
+      color, name, style: 'mma', stats: SD.styles.mma, mesh: meshes[color], x: 0, z: 0, fromX: 0, toX: 0, fromZ: 0, toZ: 0, moveT0: 0, moveDur: 0, dir: 1, yaw: 90,
+      stepKind: null, stepEnd: 0, turnSince: 0, guard: {}, guardTarget: null, guardSince: 0, lean: { x: 0, y: 0 }, leanTarget: { x: 0, y: 0 }, holdUntil: 0,
       headMax: 100, headHP: 100, body: 0, legs: 0, sta: 100, action: { type: 'idle', since: 0 }, queued: null,
       counterUntil: 0, counterMul: R.PARRY_COUNTER, dealt: 0, roundDealt: 0, shown: null, anim: null,
       bodyJoints: blankJoints(), nextThink: 0, plannedBlock: null, clinchUntil: 0
@@ -179,16 +191,53 @@ export class Fight {
     this.ev.changed();
   }
   private resetFighter(f: Fighter, x: number) {
-    Object.assign(f, { x, z: 0, fromX: x, toX: x, moveDur: 0, headMax: R.headMax(this.style(f)), body: 0, legs: 0, sta: 100,
+    Object.assign(f, { x, z: 0, fromX: x, toX: x, fromZ: 0, toZ: 0, moveDur: 0, stepKind: null, stepEnd: 0, turnSince: 0,
+      guard: {}, guardTarget: null, guardSince: 0, lean: { x: 0, y: 0 }, leanTarget: { x: 0, y: 0 }, holdUntil: 0, headMax: R.headMax(this.style(f)), body: 0, legs: 0, sta: 100,
       action: { type: 'idle', since: 0 }, clinchUntil: 0, queued: null, counterUntil: 0, dealt: 0, roundDealt: 0,
       shown: null, anim: null, nextThink: 0, plannedBlock: null });
     f.headHP = f.headMax;
   }
+  /** Turn straight to the opponent (resets, round starts). */
   face(f: Fighter) {
     const o = this.other(f);
     f.dir = f.x <= o.x ? 1 : -1;
     if (f.x === o.x) f.dir = f === this.red ? 1 : -1;
-    f.yaw = f.dir > 0 ? 90 : -90;
+    f.yaw = this.yawTo(f, o);
+    f.turnSince = 0;
+  }
+  /** The yaw that faces from a to b. */
+  yawTo(a: Fighter, b: Fighter) {
+    if (Math.abs(b.x - a.x) < 0.01 && Math.abs(b.z - a.z) < 0.01) return a.yaw;
+    return Math.atan2(b.x - a.x, b.z - a.z) * 180 / Math.PI;
+  }
+  /** How far f is turned away from their opponent, degrees. */
+  facingError(f: Fighter) { return Math.abs(wrapDeg(this.yawTo(f, this.other(f)) - f.yaw)); }
+  /** Distance between the fighters on the mat. */
+  gap() { return Math.hypot(this.red.x - this.blue.x, this.red.z - this.blue.z); }
+  /** The footwork picture for a strike from att on def. */
+  footing(att: Fighter, def: Fighter, attErr: number): R.Footing {
+    const left = rot(qEuler([0, def.yaw, 0]), [1, 0, 0]);
+    const side = (att.x - def.x) * left.x + (att.z - def.z) * left.z;
+    const since = this.now - att.stepEnd, stepping = att.moveDur > 0;
+    return {
+      dist: this.gap(), attErr, defErr: this.facingError(def), side,
+      planted: att.stepKind === 'in' && (stepping || since < R.PLANTED_MS),
+      backing: att.stepKind === 'out' && (stepping || since < 150)
+    };
+  }
+  /** Turn toward the opponent: the mover turns as they step; anyone else reacts after a moment, then pivots. */
+  private updateFacing(f: Fighter, dt: number) {
+    const o = this.other(f), err = wrapDeg(this.yawTo(f, o) - f.yaw);
+    f.dir = f.x <= o.x ? 1 : -1;
+    const type = f.action.type;
+    if (type === 'step') { f.yaw += clamp(err, -0.6 * dt, 0.6 * dt); f.turnSince = 0; return; }
+    if (Math.abs(err) < 2) { f.turnSince = 0; return; }
+    if (type !== 'idle') return;
+    if (!f.turnSince) f.turnSince = this.now;
+    const delay = R.turnDelay(this.style(f), this.isHuman(f) ? 0 : R.LEVELS[this.level].def, this.isHuman(f));
+    if (this.now - f.turnSince < delay) return;
+    const step = R.turnRate(this.style(f)) * dt / 1000;
+    f.yaw += clamp(err, -step, step);
   }
   primeBodies() {
     for (const f of [this.red, this.blue]) {
@@ -211,8 +260,24 @@ export class Fight {
     this.setAnim(f, () => {
       const t = this.standState(f, name);
       if (name !== 'stance' || this.over) return t;
-      return blendState(t, this.standState(f, 'stance_b'), 0.5 - 0.5 * Math.cos(this.now / 900 * Math.PI * 2));
+      const breathing = blendState(t, this.standState(f, 'stance_b'), 0.5 - 0.5 * Math.cos(this.now / 900 * Math.PI * 2));
+      return 'color' in f ? this.layered(f, breathing) : breathing;
     }, dur);
+  }
+  /** The stance with the head lean and the guard blended on top, so both move freely. */
+  private layered(f: Fighter, base: RigState): RigState {
+    let st = base;
+    const l = f.lean;
+    if (Math.abs(l.x) > 0.01) st = blendState(st, this.standState(f, l.x < 0 ? 'slip_left' : 'slip_right'), Math.min(1, Math.abs(l.x)));
+    if (Math.abs(l.y) > 0.01) st = blendState(st, this.standState(f, l.y < 0 ? 'duck' : 'sway'), Math.min(1, Math.abs(l.y)));
+    // Each guard zone blends in by its weight (a running weighted average keeps the total right).
+    let acc = 1 - Object.values(f.guard).reduce((n, w) => n + (w || 0), 0);
+    for (const [z, w] of Object.entries(f.guard) as [Zone, number][]) {
+      if (!w || w < 0.01) continue;
+      acc += w;
+      st = blendState(st, this.standState(f, 'block_' + z), w / Math.max(acc, 1e-3));
+    }
+    return st;
   }
   pair(name: string, dur: number, ov: Partial<Record<Role, string>> = {}) {
     this.pairName = name;
@@ -272,7 +337,7 @@ export class Fight {
     }
     if (this.mode === 'stand') {
       cpuStand(this, this.blue); cpuDefend(this, this.blue);
-      for (const f of [this.red, this.blue]) this.updateStriker(f);
+      for (const f of [this.red, this.blue]) { this.updateStriker(f); this.updateFacing(f, dt); this.updateDefense(f, dt); }
     } else if (this.mode === 'clinch') {
       cpuClinch(this);
       if (!this.busy && !this.over && (this.now - this.lastAction > 9000 || this.now - this.clinchSince > 15000)) {
@@ -302,67 +367,116 @@ export class Fight {
   startStrike(f: Fighter, key: string, chained: boolean) {
     const s = SD.strikes[key];
     const counter = this.now < f.counterUntil, counterMul = f.counterMul, gassed = f.sta < s.cost;
-    const windup = R.windupTime(s, this.style(f), { rocked: R.rocked(f.headHP), chained, counter, counterMul, gassed });
+    // Turned away from the target, the strike has to turn first: slower, and less accurate (see impact).
+    const attErr = this.facingError(f);
+    const windup = R.windupTime(s, this.style(f), { rocked: R.rocked(f.headHP), chained, counter, counterMul, gassed }) + Math.min(attErr, 60) * 1.5;
+    f.yaw = this.yawTo(f, this.other(f)); f.turnSince = 0;
+    // Striking drops the guard.
+    f.guardTarget = null; f.holdUntil = 0;
     f.sta = Math.max(0, f.sta - s.cost);
     f.counterUntil = 0;
     // Strikes go where the target was when thrown, so head movement can make them miss.
     const aim = cloneJoints(this.other(f).bodyJoints);
-    f.action = { type: 'strike', key, s, phase: 'wind', tHit: this.now + windup, counter, counterMul, gassed, aim, recoverMul: 1, tRecover: 0, tEnd: 0 };
+    f.action = { type: 'strike', key, s, phase: 'wind', tHit: this.now + windup, counter, counterMul, gassed, aim, attErr, recoverMul: 1, tRecover: 0, tEnd: 0 };
     this.stand(f, s.wind, Math.max(80, windup - 70));
     cpuSeesWindup(this, this.other(f), f, s, windup);
     if (!this.isHuman(f) && this.tells) this.ev.tell(s);
     this.lastAction = this.now;
     this.ev.event?.({ type: 'throw', attacker: f.color, key });
   }
-  startBlock(f: Fighter, zone: Zone) {
-    if (this.mode !== 'stand' || this.over || !['idle', 'block'].includes(f.action.type)) return false;
-    const win = R.blockWindow(this.style(f), this.isHuman(f) ? 0 : R.LEVELS[this.level].def);
-    f.action = { type: 'block', zone, t0: this.now, tEnd: this.now + win };
-    f.sta = Math.max(0, f.sta - 1);
-    this.stand(f, 'block_' + zone, 80);
+  // ---------- Free-form defense ----------
+  /** Hold the guard in a zone, or drop it (null). Raising it into a new zone starts the parry window. */
+  setGuard(f: Fighter, zone: Zone | null) {
+    if (zone && (f.action.type === 'strike' || f.action.type === 'stun')) return;
+    if (zone !== f.guardTarget) { f.guardTarget = zone; if (zone) f.guardSince = this.now; }
+    f.holdUntil = 0;
+  }
+  /** Lean the head: x from slip left (-1) to slip right (1), y from duck (-1) to sway back (1). */
+  setLean(f: Fighter, x: number, y: number) {
+    f.leanTarget = { x: clamp(x, -1, 1), y: clamp(y, -1, 1) };
+    f.holdUntil = 0;
+  }
+  /** A tap: hold a guard zone for a moment (touch buttons and the CPU). */
+  holdGuard(f: Fighter, zone: Zone, ms = 450) {
+    if (this.mode !== 'stand' || this.over) return false;
+    this.setGuard(f, zone);
+    f.holdUntil = this.now + ms;
     return true;
   }
-  // Head movement: a short window that makes the matching strikes miss entirely, then a brief recovery.
-  startEvade(f: Fighter, kind: EvadeKind) {
-    if (this.mode !== 'stand' || this.over || !['idle', 'block'].includes(f.action.type)) return false;
-    const w = R.evadeWindow(this.style(f), kind, this.isHuman(f) ? 0 : R.LEVELS[this.level].def);
-    f.action = { type: 'evade', kind, t0: this.now, tActive: this.now + w.active, tEnd: this.now + w.active + w.recover, back: false };
+  /** A tap: hold a head movement for a moment. */
+  holdLean(f: Fighter, kind: EvadeKind, ms = 420) {
+    if (this.mode !== 'stand' || this.over) return false;
+    const v = { slip_left: [-1, 0], slip_right: [1, 0], duck: [0, -1], sway: [0, 1] }[kind];
+    this.setLean(f, v[0], v[1]);
     f.sta = Math.max(0, f.sta - R.evadeCost(kind));
-    this.stand(f, kind, 90);
+    f.holdUntil = this.now + ms;
     return true;
   }
-  startStep(f: Fighter, dirn: number) {
-    if (this.mode !== 'stand' || this.over || f.action.type !== 'idle') return;
-    const o = this.other(f), dist = Math.abs(f.x - o.x);
-    let to = f.x + dirn * f.dir * 26;
-    if (dirn > 0 && dist - 26 < 48) to = o.x - f.dir * 48;
-    to = clamp(to, -250, 250);
-    const dur = 200 * (1 + f.legs / 200);
+  /** Ease the guard and lean toward their targets; holding them costs a little stamina. */
+  private updateDefense(f: Fighter, dt: number) {
+    if (f.holdUntil && this.now > f.holdUntil) { f.holdUntil = 0; f.guardTarget = null; f.leanTarget = { x: 0, y: 0 }; }
+    const st = this.style(f), busy = f.action.type === 'strike' || f.action.type === 'stun';
+    const up = R.guardSpeed(st) * dt / 1000, down = up * 0.8;
+    for (const z of Object.keys(SD.zones) as Zone[]) {
+      const w = f.guard[z] || 0, target = !busy && f.guardTarget === z ? 1 : 0;
+      const next = w + clamp(target - w, -down * (busy ? 2 : 1), up);
+      if (next > 0.005) f.guard[z] = next; else delete f.guard[z];
+    }
+    const k = R.leanSpeed(st) * dt / 1000 * (f.sta < 15 ? 0.6 : 1);
+    f.lean = { x: f.lean.x + clamp(f.leanTarget.x - f.lean.x, -k, k), y: f.lean.y + clamp(f.leanTarget.y - f.lean.y, -k, k) };
+    const holding = f.guardTarget !== null || Math.abs(f.lean.x) + Math.abs(f.lean.y) > 0.5;
+    if (holding) f.sta = Math.max(0, f.sta - R.HOLD_COST * dt / 1000);
+  }
+
+  /**
+   * A step: fwd 1 in toward the opponent, -1 out; side moves around them, with +1 toward the camera (+z).
+   * The fighter turns to face the opponent as they step; the opponent takes a moment to turn back.
+   */
+  startStep(f: Fighter, fwd: number, side = 0) {
+    if (this.mode !== 'stand' || this.over || f.action.type !== 'idle' || (!fwd && !side)) return;
+    const o = this.other(f), dx = o.x - f.x, dz = o.z - f.z, d = Math.hypot(dx, dz) || 1;
+    const ux = dx / d, uz = dz / d;
+    let px = -uz, pz = ux;
+    if (pz * side < 0 || (Math.abs(pz) < 0.05 && px * side < 0)) { px = -px; pz = -pz; }
+    let reach = 26;
+    if (fwd > 0 && d - reach < 48) reach = Math.max(0, d - 48);
+    let tx = f.x + ux * fwd * reach + px * Math.abs(side) * 30, tz = f.z + uz * fwd * reach + pz * Math.abs(side) * 30;
+    // Stay inside the cage, and near enough the camera's line to read as side-on.
+    tz = clamp(tz, -130, 130);
+    const r = Math.hypot(tx, tz);
+    if (r > 260) { tx *= 260 / r; tz *= 260 / r; }
+    const dur = 200 * (1 + f.legs / 200) * (side && !fwd ? 1.1 : 1);
     f.action = { type: 'step', tEnd: this.now + dur };
-    Object.assign(f, { fromX: f.x, toX: to, moveT0: this.now, moveDur: dur });
-    f.sta = Math.max(0, f.sta - 1);
+    f.stepKind = fwd > 0 ? 'in' : fwd < 0 ? 'out' : 'side';
+    f.stepEnd = this.now + dur;
+    Object.assign(f, { fromX: f.x, toX: tx, fromZ: f.z, toZ: tz, moveT0: this.now, moveDur: dur });
+    f.sta = Math.max(0, f.sta - (side ? 1.5 : 1));
   }
   private stun(f: Fighter, zone: Zone, dmg: number) {
     const name = { high: 'hit_high', left: 'hit_left', right: 'hit_right', body: 'hit_body', low: 'hit_low' }[zone];
     f.action = { type: 'stun', tEnd: this.now + 160 + dmg * 9 };
-    f.queued = null; f.plannedBlock = null;
+    f.queued = null; f.plannedBlock = null; f.guardTarget = null; f.leanTarget = { x: 0, y: 0 }; f.holdUntil = 0;
     if (!this.isHuman(f)) this.ev.tell(null);
     this.stand(f, name, 80);
   }
   private impact(att: Fighter) {
     const a = att.action as StrikeAction, s = a.s, def = this.other(att);
     const at = def.bodyJoints[s.part === 'legs' ? 'lhip' : s.part === 'body' ? 'chest' : 'head']!;
-    if (!R.inRange(s, Math.abs(att.x - def.x))) {
-      this.ev.pop(at, 'Whiff', 'miss'); a.recoverMul = 1.6; this.ev.sfx?.({ k: 'whiff' });
+    const foot = R.footwork(a.key, s, this.footing(att, def, a.attErr));
+    if (!R.inRange(s, this.gap()) || foot.offTarget) {
+      this.ev.pop(at, foot.offTarget ? 'Off target' : 'Whiff', 'miss'); a.recoverMul = 1.6; this.ev.sfx?.({ k: 'whiff' });
       this.ev.event?.({ type: 'strike', attacker: att.color, key: a.key, result: 'whiff' });
       return;
     }
-    const da = def.action;
-    const out = R.defend(s, da.type === 'evade' ? { type: 'evade', kind: da.kind, active: this.now <= da.tActive }
-      : da.type === 'block' ? { type: 'block', zone: da.zone, sinceMs: this.now - da.t0 } : { type: 'none' });
+    let out = R.resolveDefense(s, def.guard, def.lean, def.guardTarget === s.zone && this.now - def.guardSince <= R.PERFECT_PARRY_MS);
+    // An angle or a planted lead foot can get a shot past a correct block, or catch a late slip.
+    if (out.result === 'blocked' && this.rng() < foot.leak) out = { result: 'partial', mult: 0.5 };
+    else if (out.result === 'dodged' && this.rng() < foot.leak * 0.4) out = { result: 'grazed', mult: 0.4 };
+    const da = def.lean;
     this.ev.event?.({ type: 'strike', attacker: att.color, key: a.key, result: out.result });
     if (out.result === 'dodged') {
-      this.ev.pop(at, R.EVADED[(da as { kind: EvadeKind }).kind] + '! Counter', 'gold');
+      const kind: EvadeKind = Math.abs(da.y) >= Math.abs(da.x) ? (da.y < 0 ? 'duck' : 'sway') : da.x < 0 ? 'slip_left' : 'slip_right';
+      this.ev.pop(at, R.EVADED[kind] + '! Counter', 'gold');
       this.ev.sfx?.({ k: 'whiff' });
       a.recoverMul = 1.6;
       def.counterUntil = this.now + R.COUNTER_WINDOW_MS; def.counterMul = out.counterMul!;
@@ -375,7 +489,7 @@ export class Fight {
     else if (out.result === 'parried') { tag = ['Parry! Counter', 'gold']; def.counterUntil = this.now + R.COUNTER_WINDOW_MS; def.counterMul = out.counterMul!; }
     else if (out.result === 'blocked') tag = ['Blocked', 'block'];
     else if (out.result === 'partial') tag = ['Partly blocked', 'block'];
-    const dmg = R.strikeDamage(s, this.style(att), out.mult, a, this.rng());
+    const dmg = R.strikeDamage(s, this.style(att), out.mult * foot.dmg, a, this.rng());
     this.ev.sfx?.(out.result === 'checked' ? { k: 'check' } : out.result === 'parried' ? { k: 'parry' }
       : out.mult >= 0.5 && dmg >= 1 ? { k: 'hit', part: s.part, dmg } : { k: 'block' });
     if (dmg >= 1) {
@@ -384,7 +498,9 @@ export class Fight {
         this.stun(def, s.zone, dmg);
         this.shake = Math.min(10, dmg * 0.5);
         this.ev.rumble(this.isHuman(def) ? 1 : 0.35, this.isHuman(def) ? 220 : 90);
-        if (!tag) tag = [(out.result === 'into' ? 'Into it! ' : a.counter ? 'Counter ' : '') + Math.round(dmg), a.counter ? 'gold' : 'hit'];
+        // Name what footwork did, so it is learnable: angle, outside foot, planted.
+        const why = foot.tags.find(t => t === 'Angle' || t === 'Outside foot' || t === 'Planted');
+        if (!tag) tag = [(out.result === 'into' ? 'Into it! ' : a.counter ? 'Counter ' : why ? why + '! ' : '') + Math.round(dmg), a.counter || why ? 'gold' : 'hit'];
         if (!this.config.infinite && R.knockdownCheck(s.part, dmg, def.headHP, def.headMax, this.rng())) { this.ev.pop(at, tag[0], tag[1]); return this.knockdown(att, def); }
       }
     }
@@ -401,6 +517,7 @@ export class Fight {
     if (f.moveDur) {
       const u = clamp((this.now - f.moveT0) / f.moveDur, 0, 1);
       f.x = f.fromX + (f.toX - f.fromX) * ease(u);
+      f.z = f.fromZ + (f.toZ - f.fromZ) * ease(u);
       if (u >= 1) f.moveDur = 0;
     }
     if (a.type === 'strike') {
@@ -419,10 +536,7 @@ export class Fight {
         this.stand(f, 'stance', dur);
       }
       if (a.phase === 'recover' && this.now >= a.tEnd) this.toIdle(f);
-    } else if (a.type === 'evade') {
-      if (!a.back && this.now >= a.tActive) { a.back = true; this.stand(f, 'stance', a.tEnd - a.tActive + 60); }
-      if (this.now >= a.tEnd) this.toIdle(f);
-    } else if ((a.type === 'block' || a.type === 'stun' || a.type === 'step') && this.now >= a.tEnd) {
+    } else if ((a.type === 'stun' || a.type === 'step') && this.now >= a.tEnd) {
       if (a.type !== 'step') this.stand(f, 'stance', 220);
       this.toIdle(f);
     }
@@ -432,8 +546,6 @@ export class Fight {
     if (f.queued && !this.over && this.mode === 'stand') {
       const q = f.queued; f.queued = null;
       if (q.kind === 'strike') this.startStrike(f, q.key!, this.now - q.at < 600);
-      else if (q.kind === 'block') this.startBlock(f, q.zone as Zone);
-      else if (q.kind === 'evade') this.startEvade(f, q.zone as EvadeKind);
       else if (q.kind === 'shoot') this.shoot(f);
     }
   }
@@ -494,7 +606,11 @@ export class Fight {
     this.top = top; this.bot = bot;
     this.d = top.x <= bot.x ? 1 : -1;
     this.anchor = (top.x + bot.x) / 2;
-    for (const f of [top, bot]) { f.action = { type: 'grapple' }; f.queued = null; f.plannedBlock = null; f.moveDur = 0; }
+    // Grappling happens on the camera's line: fold any angle back onto it.
+    for (const f of [top, bot]) {
+      f.action = { type: 'grapple' }; f.queued = null; f.plannedBlock = null; f.moveDur = 0; f.z = 0;
+      f.guard = {}; f.guardTarget = null; f.lean = { x: 0, y: 0 }; f.leanTarget = { x: 0, y: 0 }; f.holdUntil = 0;
+    }
     this.ev.tell(null);
   }
   private swapTop() { [this.top, this.bot] = [this.bot, this.top]; this.d = -this.d; }
@@ -503,7 +619,7 @@ export class Fight {
   shoot(att: Fighter) {
     if (this.mode !== 'stand' || att.action.type !== 'idle') return;
     const def = this.other(att);
-    if (Math.abs(att.x - def.x) > 125) { if (this.isHuman(att)) this.ev.pop(att.bodyJoints.head, 'Too far', 'miss'); return; }
+    if (this.gap() > 125) { if (this.isHuman(att)) this.ev.pop(att.bodyJoints.head, 'Too far', 'miss'); return; }
     this.ev.event?.({ type: 'shoot', attacker: att.color });
     this.act(async () => {
       this.mode = 'grapple';
@@ -551,7 +667,7 @@ export class Fight {
   private backToFeet(dur: number) {
     const a = this.red.shown!.P.x, b = this.blue.shown!.P.x, m = clamp((a + b) / 2, -180, 180);
     const left = a <= b ? this.red : this.blue, right = this.other(left);
-    left.x = m - 60; right.x = m + 60;
+    left.x = m - 60; right.x = m + 60; left.z = right.z = 0;
     for (const f of [this.red, this.blue]) { this.face(f); f.action = { type: 'idle', since: this.now }; f.moveDur = 0; this.stand(f, 'stance', dur); }
     this.mode = 'stand'; this.pos = null; this.top = this.bot = null; this.camOverride = null;
     this.moveRef('ref_stand');
@@ -710,7 +826,7 @@ export class Fight {
   // The 'top' role is whoever holds the dominant tie. Knees and elbows are telegraphed, so the other fighter can block them.
   enterClinch(att: Fighter) {
     if (this.mode !== 'stand' || att.action.type !== 'idle') return;
-    if (Math.abs(att.x - this.other(att).x) > 80) { if (this.isHuman(att)) this.ev.pop(att.bodyJoints.head, 'Too far', 'miss'); return; }
+    if (this.gap() > 80) { if (this.isHuman(att)) this.ev.pop(att.bodyJoints.head, 'Too far', 'miss'); return; }
     this.act(async () => {
       this.mode = 'grapple';
       att.sta = Math.max(0, att.sta - 5);
@@ -862,7 +978,7 @@ export class Fight {
       this.round++; this.clock = this.roundMs();
       this.ev.sfx?.({ k: 'round', n: this.round, last: this.round === this.rounds() });
       this.ev.sfx?.({ k: 'bell' });
-      this.red.x = -70; this.blue.x = 70;
+      this.red.x = -70; this.blue.x = 70; this.red.z = this.blue.z = 0;
       for (const f of [this.red, this.blue]) {
         f.moveDur = 0; f.roundDealt = 0; f.sta = R.maxStamina(f.body);
         f.headHP = Math.min(f.headMax, f.headHP + f.headMax * 0.12);
@@ -907,7 +1023,8 @@ export class Fight {
   }
 
   // ---------- Commands from any input device ----------
-  // strike:<key>, block:<zone>, evade:<kind>, step:<screen dir>, shoot, clinch, knee, elbow, cblock:<zone>, pummel, trip,
+  // strike:<key>, block:<zone> and evade:<kind> (taps), guard:<zone|off> and lean:<x,y> (held), step:<screen dir>,
+  // side:<+1 toward camera | -1 away>, move:<screen x>,<side>, shoot, clinch, knee, elbow, cblock:<zone>, pummel, trip,
   // breakaway, punch, block, advance, sweep, pass (advance or sweep), submit, getup, time.
   command(cmd: string) {
     const me = this.human();
@@ -931,12 +1048,15 @@ export class Fight {
       if (kind === 'clinch') { if (a.type === 'idle') this.enterClinch(me); return; }
       if (kind === 'strike') {
         if (a.type === 'idle') this.startStrike(me, arg, this.now - a.since < 250);
-        else if (a.type === 'strike' && a.phase !== 'wind') me.queued = { kind: 'strike', key: arg, at: this.now };
-      } else if (kind === 'block') {
-        if (!this.startBlock(me, arg as Zone) && a.type === 'strike' && a.phase === 'recover') me.queued = { kind: 'block', zone: arg, at: this.now };
-      } else if (kind === 'evade') {
-        if (!this.startEvade(me, arg as EvadeKind) && a.type === 'strike' && a.phase === 'recover') me.queued = { kind: 'evade', zone: arg, at: this.now };
-      } else if (kind === 'step') this.startStep(me, +arg * me.dir);
+        // Pressed mid-step or mid-combo, the strike fires as soon as the feet land or the last one recovers.
+        else if ((a.type === 'strike' && a.phase !== 'wind') || a.type === 'step') me.queued = { kind: 'strike', key: arg, at: this.now };
+      } else if (kind === 'block') this.holdGuard(me, arg as Zone);
+      else if (kind === 'evade') this.holdLean(me, arg as EvadeKind);
+      else if (kind === 'guard') this.setGuard(me, arg === 'off' ? null : arg as Zone);
+      else if (kind === 'lean') { const [x, y] = arg.split(',').map(Number); this.setLean(me, x, y); }
+      else if (kind === 'step') this.startStep(me, +arg * me.dir);
+      else if (kind === 'side') this.startStep(me, 0, +arg);
+      else if (kind === 'move') { const [x, z] = arg.split(',').map(Number); this.startStep(me, x * me.dir, z); }
       else if (kind === 'shoot') { if (a.type === 'idle') this.shoot(me); else if (a.type === 'strike') me.queued = { kind: 'shoot', at: this.now }; }
       return;
     }
@@ -955,12 +1075,12 @@ export class Fight {
   // ---------- Debug hooks for automated tests ----------
   debugStandPose(redPose: string, bluePose: string, dist: number, strikeKey?: string) {
     this.gen++; this.over = true; this.mode = 'stand';
-    this.red.x = -dist / 2; this.blue.x = dist / 2;
+    this.red.x = -dist / 2; this.blue.x = dist / 2; this.red.z = this.blue.z = 0;
     for (const f of [this.red, this.blue]) { this.face(f); f.moveDur = 0; f.action = { type: 'done' }; f.shown = null; }
     this.primeBodies();
     for (const f of [this.red, this.blue]) { this.stand(f, 'stance', 0); f.shown = this.animState(f); f.bodyJoints = bodyJoints(f.shown); }
     const s = SD.strikes[strikeKey || 'jab'];
-    this.blue.action = { type: 'strike', key: strikeKey || 'jab', s, phase: 'extend', tHit: 0, counter: false, counterMul: 1, gassed: false, aim: cloneJoints(this.red.bodyJoints), recoverMul: 1, tRecover: 0, tEnd: 0 };
+    this.blue.action = { type: 'strike', key: strikeKey || 'jab', s, phase: 'extend', tHit: 0, counter: false, counterMul: 1, gassed: false, aim: cloneJoints(this.red.bodyJoints), attErr: 0, recoverMul: 1, tRecover: 0, tEnd: 0 };
     this.stand(this.red, redPose, 0); this.stand(this.blue, bluePose, 0);
   }
   debugPairPose(name: string, topColor: Color, ov?: Partial<Record<Role, string>>, subU?: number) {

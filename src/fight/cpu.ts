@@ -1,7 +1,8 @@
 // CPU opponent: chooses strikes, steps, clinches and takedowns on the feet, reads incoming strikes, and works the ground.
 import { SD } from '../data';
 import type { EvadeKind, Strike, Zone } from '../data/types';
-import { clamp, inRange, LEVELS, NEXT } from './rules';
+import { qEuler, rot } from '../rig/math';
+import { clamp, inRange, leanAmounts, LEVELS, NEXT } from './rules';
 import type { Fight, Fighter } from './fight';
 
 function weightedPick(f: Fight, mix: Record<string, number>, ok: (k: string) => boolean) {
@@ -12,12 +13,28 @@ function weightedPick(f: Fight, mix: Record<string, number>, ok: (k: string) => 
 }
 const pick = <T>(f: Fight, list: T[]) => list[Math.floor(f.rng() * list.length)];
 
+/** Weight up strikes that beat what the opponent is holding: a deep duck invites the uppercut, a high guard the body. */
+function punishMix(mix: Record<string, number>, o: Fighter): Record<string, number> {
+  const out = { ...mix };
+  const amt = leanAmounts(o.lean);
+  for (const k of Object.keys(out)) {
+    const st = SD.strikes[k];
+    for (const [kind, a] of Object.entries(amt) as [EvadeKind, number][]) {
+      const m = st.evade?.[kind];
+      if (a > 0.4 && (m === undefined || m > 1)) out[k] *= 1 + a * 2;
+    }
+    const held = Object.entries(o.guard).filter(([, w]) => (w || 0) > 0.5).map(([z]) => z);
+    if (held.length && !held.includes(st.zone)) out[k] *= 1.8;
+  }
+  return out;
+}
+
 declare global { interface Window { __passiveCpu?: boolean } }
 
 export function cpuStand(fight: Fight, f: Fighter) {
   if (fight.over || fight.mode !== 'stand' || f.action.type !== 'idle' || fight.now < f.nextThink || window.__passiveCpu) return;
   const plan = fight.config.cpu || {};
-  const s = fight.style(f), lv = LEVELS[fight.level], o = fight.other(f), dist = Math.abs(f.x - o.x);
+  const s = fight.style(f), lv = LEVELS[fight.level], o = fight.other(f), dist = fight.gap();
   f.nextThink = fight.now + fight.rand(220, 520) / lv.aggr;
   if (plan.shootEvery) {
     if (fight.now > fight.nextShoot && dist < 110) { fight.nextShoot = fight.now + plan.shootEvery; return fight.shoot(f); }
@@ -38,11 +55,19 @@ export function cpuStand(fight: Fight, f: Fighter) {
   if (plan.move !== false) {
     if (dist > range + 18 && fight.rng() < 0.7) return fight.startStep(f, 1);
     if (dist < range - 22 && fight.rng() < 0.45) return fight.startStep(f, -1);
+    // Footwork: circle, mostly toward the outside of the opponent's lead foot, then strike off the angle.
+    if (!plan.interval && dist < range + 30 && fight.rng() < s.evasion / 100 * 0.2 * lv.aggr) {
+      const left = rot(qEuler([0, o.yaw, 0]), [1, 0, 0]);
+      const outside = left.z >= 0 ? 1 : -1;
+      f.nextThink = fight.now + fight.rand(60, 180);
+      return fight.startStep(f, 0, fight.rng() < 0.65 ? outside : -outside);
+    }
   }
   if (plan.attack === false) return;
   if (plan.interval ? fight.now < fight.nextAttack : fight.rng() > 0.65 * s.aggression * lv.aggr) return;
   // Drill partners (steady interval) only throw what will reach; fight CPUs can misjudge range a little.
-  const key = weightedPick(fight, plan.mix || s.mix, k => {
+  // Punish a held guard or lean with the strikes that beat it.
+  const key = weightedPick(fight, plan.mix ? plan.mix : punishMix(s.mix, o), k => {
     const st = SD.strikes[k], r = st.range;
     return plan.interval ? inRange(st, dist) : dist >= r[0] - 4 && dist <= r[1] + 6 && f.sta >= st.cost * 0.7;
   });
@@ -75,9 +100,9 @@ export function cpuDefend(fight: Fight, f: Fighter) {
   const p = f.plannedBlock;
   if (!p || fight.now < p.at) return;
   f.plannedBlock = null;
-  if (f.action.type !== 'idle' && f.action.type !== 'block') return;
-  if (p.evade) fight.startEvade(f, p.evade);
-  else if (p.zone) fight.startBlock(f, p.zone);
+  if (f.action.type !== 'idle' && f.action.type !== 'step') return;
+  if (p.evade) fight.holdLean(f, p.evade, fight.rand(300, 420));
+  else if (p.zone) fight.holdGuard(f, p.zone, fight.rand(380, 520));
 }
 
 export function cpuClinch(fight: Fight) {

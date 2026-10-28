@@ -45,6 +45,18 @@ tests/                  rules.test.ts (fight rules), data.test.ts (data integrit
 
 The fight logic never touches the DOM. It reports what happened through the `FightEvents` interface (pops, banners, log lines, rumble), which the HUD and input modules implement. That keeps the rules testable and lets new screens, such as training mode, drive the same fight.
 
+## Footwork and free-form defense
+
+Fighters move around each other, not just back and forth. ← → step in and out, ↑ ↓ circle (hold to keep moving); on a controller the left stick does both. The fighter who moves turns as they step; the other needs a moment to react and pivot back.
+
+Where you stand changes your strikes (`footwork` in `src/fight/rules.ts`):
+- **Range**: each strike hits hardest a little inside its full reach. Reaching or jammed loses power.
+- **Planted lead foot**: step in and punch for extra power; punching while backing up is weaker.
+- **Angle**: strikes on an opponent who hasn't turned to face you land harder and slip past blocks. Throwing while turned away is slower and less accurate.
+- **Lead foot outside theirs**: circle to your right (orthodox against orthodox) and your rear hand lines up while you move away from theirs.
+
+The guard and head movement are held and blend freely. Hold Space (L1) with a direction to keep a guard in that zone; raise it just before impact to parry. Hold F with any mix of W/A/S/D (or push the right stick) to lean: a strike only misses as far as your head has actually moved off its line, so half a slip grazes, and slipping and ducking together is a bob and weave. A readout under your meters shows range, angles and your lead foot.
+
 ## Sound
 
 Every sound is synthesized in the browser with Web Audio, so there are no audio files to ship:

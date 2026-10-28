@@ -333,7 +333,8 @@ declare global {
 window.__fight = () => ({
   tie: fight.mode === 'clinch' ? fight.top?.name : null, mode: fight.mode, pos: fight.pos, top: fight.top?.name, round: fight.round,
   over: fight.over, busy: fight.busy, timing: !!fight.timing, sub: !!fight.sub,
-  red: { head: Math.round(fight.red.headHP), sta: Math.round(fight.red.sta), act: fight.red.action.type },
+  red: { head: Math.round(fight.red.headHP), sta: Math.round(fight.red.sta), act: fight.red.action.type, x: Math.round(fight.red.x), z: Math.round(fight.red.z), yaw: Math.round(fight.red.yaw), err: Math.round(fight.facingError(fight.red)) },
+  bluePos: { x: Math.round(fight.blue.x), z: Math.round(fight.blue.z), yaw: Math.round(fight.blue.yaw), err: Math.round(fight.facingError(fight.blue)) },
   blue: { head: Math.round(fight.blue.headHP), sta: Math.round(fight.blue.sta), act: fight.blue.action.type }
 });
 window.__standPose = (red, blue, dist, strike) => fight.debugStandPose(red, blue, dist, strike);

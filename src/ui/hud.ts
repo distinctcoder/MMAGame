@@ -3,7 +3,7 @@ import type * as THREE from 'three';
 import { FD, SD } from '../data';
 import type { EvadeKind, Strike, Zone } from '../data/types';
 import type { Fight, PopKind } from '../fight/fight';
-import { NEXT, SWEEP } from '../fight/rules';
+import { leanAmounts, NEXT, SWEEP } from '../fight/rules';
 import { LABELS, type Input } from '../input/input';
 import { clamp, type Vector3 } from '../rig/math';
 
@@ -24,6 +24,8 @@ const ACTIONS: { ctx: Ctx; cmd: string; text: string; key: string }[] = [
   { ctx: 'stand', cmd: 'clinch', text: 'Clinch', key: 'clinch' },
   { ctx: 'stand', cmd: 'step:-1', text: 'Step left', key: 'back' },
   { ctx: 'stand', cmd: 'step:1', text: 'Step right', key: 'fwd' },
+  { ctx: 'stand', cmd: 'side:-1', text: 'Circle away', key: 'sideup' },
+  { ctx: 'stand', cmd: 'side:1', text: 'Circle near', key: 'sidedown' },
   { ctx: 'clinch', cmd: 'knee', text: 'Knee', key: 'knee' },
   { ctx: 'clinch', cmd: 'elbow', text: 'Elbow', key: 'elbow' },
   { ctx: 'clinch', cmd: 'cblock:body', text: 'Block knee', key: 'block' },
@@ -101,9 +103,10 @@ export class Hud {
     }
     const c = Math.max(0, Math.ceil(f.clock / 1000));
     $('clock').innerHTML = `<small>R${f.round}</small>${Math.floor(c / 60)}:${String(c % 60).padStart(2, '0')}`;
-    const a = f.red.action;
-    document.querySelectorAll<HTMLElement>('#blockpad button').forEach(b => b.classList.toggle('active', f.mode === 'stand' && a.type === 'block' && a.zone === b.dataset.zone));
-    document.querySelectorAll<HTMLElement>('#evadepad button').forEach(b => b.classList.toggle('active', f.mode === 'stand' && a.type === 'evade' && a.kind === b.dataset.kind));
+    const me = f.red, lean = leanAmounts(me.lean);
+    this.renderFooting();
+    document.querySelectorAll<HTMLElement>('#blockpad button').forEach(b => b.classList.toggle('active', f.mode === 'stand' && (me.guard[b.dataset.zone as Zone] || 0) > 0.5));
+    document.querySelectorAll<HTMLElement>('#evadepad button').forEach(b => b.classList.toggle('active', f.mode === 'stand' && lean[b.dataset.kind as EvadeKind] > 0.5));
     $('timing').hidden = !f.timing;
     if (f.timing) $('timing-needle').style.left = (f.needlePos() * 100) + '%';
     $('sub').hidden = !f.sub;
@@ -159,7 +162,9 @@ export class Hud {
     if (f.over) msg = 'Fight over. Restart to go again, or use the back button above.';
     else if (f.timing) msg = `${f.timing.title} Press ${key('time')} when the needle is in the green.`;
     else if (f.sub) msg = `Mash ${key('time')} ${f.sub.att === me ? 'to finish it.' : 'to escape.'}`;
-    else if (f.mode === 'stand') msg = `Strike, block with ${key('block')}${pad ? ' + stick' : ' + W/A/S/D'}, slip or duck with ${key('evade')}${pad ? '' : ' + W/A/S/D'}, clinch with ${key('clinch')} or shoot with ${key('shoot')}.`;
+    else if (f.mode === 'stand') msg = pad
+      ? `Move and circle with the left stick, hold ${key('block')} + stick to guard, lean with the right stick, clinch with ${key('clinch')} or shoot with ${key('shoot')}.`
+      : `Step with ← →, circle with ↑ ↓, hold Space + W/A/S/D to guard, hold F + W/A/S/D to slip, duck and sway, clinch with C or shoot with G.`;
     else if (f.mode === 'clinch') msg = (f.top === me ? 'You have the tie: knees and elbows hit hardest, trips are easier. ' : 'They have the tie: pummel to take it, block their knees and elbows, or break away. ')
       + `Knee ${key('knee')}, elbow ${key('elbow')}, trip ${key('trip')}, break ${key('breakaway')}.`;
     else if (f.mode === 'ground' && f.top === me) msg = `On top in ${posLabel.toLowerCase()}. Punch, pass, ${f.canSubmit(me) ? subLabel.toLowerCase() + ', ' : ''}or stand up.`;
@@ -213,14 +218,34 @@ export class Hud {
     }
     $('defense').innerHTML = html + '</tbody>';
   }
+  /** The footing chips under your meters: range, angles, lead foot, planted. */
+  private footingHtml = '';
+  private renderFooting() {
+    const f = this.fight, me = f.red, o = f.blue, chips: [string, string][] = [];
+    if (f.mode === 'stand' && !f.over) {
+      const d = f.gap(), jab = SD.strikes.jab, hook = SD.strikes.lead_hook;
+      if (d > jab.range[1]) chips.push(['Out of range', '']);
+      else if (d < hook.range[0] + 12) chips.push(['Close: hooks', '']);
+      else chips.push(['In range', 'good']);
+      const ft = f.footing(me, o, f.facingError(me));
+      if (ft.defErr > 15) chips.push(['Angle on them', 'good']);
+      if (ft.attErr > 15) chips.push(['They have the angle', 'bad']);
+      if (ft.side > 12) chips.push(['Outside foot', 'good']);
+      else if (ft.side < -12) chips.push(['Inside: watch the right', 'bad']);
+      if (ft.planted) chips.push(['Planted', 'good']);
+    }
+    const html = chips.map(([t, c]) => `<span class="${c}">${t}</span>`).join('');
+    if (html !== this.footingHtml) { this.footingHtml = html; $('footing').innerHTML = html; }
+  }
+
   buildControlsTable() {
     const kb = this.input.device !== 'pad', L = LABELS[kb ? 'keyboard' : 'pad'];
     const rows: [string, string][] = [
       ['Jab / cross', `${L.jab} / ${L.cross}`], ['Lead hook / rear hook', `${L.lead_hook} / ${L.rear_hook}`], ['Uppercut', L.uppercut],
       ['Low / body / head kick', `${L.low_kick} / ${L.body_kick} / ${L.head_kick}`],
-      ['Block', kb ? 'Space + W high, A left, D right, S check (Space alone: body)' : 'L1 + stick up high, left, right, down check (L1 alone: body)'],
-      ['Head movement', kb ? 'F + W sway back, A slip left, D slip right, S duck (F alone: duck)' : 'Flick right stick: up sway back, left or right slip, down duck. Or R2 + left stick'],
-      ['Move', kb ? '← / →' : 'Left stick or d-pad'], ['Shoot takedown', L.shoot], ['Clinch (close range)', L.clinch],
+      ['Guard (hold)', kb ? 'Hold Space + W high, A left, D right, S check (Space alone: body). Raise it just before impact to parry' : 'Hold L1 + stick up high, left, right, down check (L1 alone: body). Raise it just before impact to parry'],
+      ['Head movement (hold)', kb ? 'Hold F + W sway back, A slip left, D slip right, S duck. Combine them: S + A bobs left (F alone: duck)' : 'Right stick leans as far as you push it, in any direction. Or hold R2 + left stick'],
+      ['Footwork', kb ? '← → step out and in, ↑ ↓ circle around them. Hold to keep moving' : 'Left stick: left and right step out and in, up and down circle around them'], ['Shoot takedown', L.shoot], ['Clinch (close range)', L.clinch],
       ['In the clinch', kb ? 'L knee, J elbow, C pummel, G trip, R break away, Space block knee, W+Space block elbow'
         : '✕ knee, □ elbow, R1 pummel, L2 trip, R2 break away, L1 block knee, L1+up block elbow'],
       ['Timing bar / mash', L.time], ['Ground and pound (top)', L.punch], ['Pass (top) / sweep (bottom)', L.advance],

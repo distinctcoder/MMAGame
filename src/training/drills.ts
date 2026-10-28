@@ -40,13 +40,13 @@ export const DRILLS: Record<DrillId, Drill> = {
   },
   block: {
     id: 'block', name: 'Block drill', kind: 'defense', count: 20,
-    blurb: '20 strikes of every kind. Raise the block that matches each one. Late blocks parry for bonus points; streaks add more.',
+    blurb: '20 strikes of every kind. Hold the guard where each one lands. Raise it just before impact to parry for bonus points; streaks add more.',
     points: BLOCK_POINTS,
     config: { ...TRAINING, startDist: 72, cpu: { mix: ALL_STRIKES, interval: [1100, 1700], keepRange: 74, defend: false, takedowns: false, clinch: false } }
   },
   dodge: {
     id: 'dodge', name: 'Head movement', kind: 'defense', count: 20,
-    blurb: '20 punches. Slip, duck or sway so they miss completely. Blocks still score, but less. Duck an uppercut and you eat it.',
+    blurb: '20 punches. Lean your head off each one\'s line so it misses completely; halfway only grazes. Bob and weave under hooks. Duck an uppercut and you eat it.',
     points: { dodged: 100, parried: 50, blocked: 30, partial: 15, grazed: 20 },
     config: { ...TRAINING, startDist: 72, cpu: { mix: PUNCHES, interval: [1100, 1700], keepRange: 74, defend: false, takedowns: false, clinch: false } }
   },

@@ -1,5 +1,5 @@
 // Keyboard and gamepad (PS5 DualSense or any standard-mapping controller) turned into fight commands.
-import type { EvadeKind, Zone } from '../data/types';
+import type { Zone } from '../data/types';
 import type { Fight } from '../fight/fight';
 
 export type Device = 'keyboard' | 'pad' | 'blocked';
@@ -7,29 +7,28 @@ export type Device = 'keyboard' | 'pad' | 'blocked';
 export const LABELS: Record<'keyboard' | 'pad', Record<string, string>> = {
   keyboard: {
     time: 'Space', block: 'Space', blockhigh: 'W+Space', evade: 'F', jab: 'J', cross: 'K', lead_hook: 'U', rear_hook: 'I', uppercut: 'Y',
-    low_kick: 'L', body_kick: 'O', head_kick: 'P', shoot: 'G', clinch: 'C', back: '←', fwd: '→',
+    low_kick: 'L', body_kick: 'O', head_kick: 'P', shoot: 'G', clinch: 'C', back: '←', fwd: '→', sideup: '↑', sidedown: '↓',
     knee: 'L', elbow: 'J', trip: 'G', pummel: 'C', breakaway: 'R', punch: 'J', advance: 'G', sweep: 'G', submit: 'H', getup: 'R'
   },
   pad: {
     time: '✕', block: 'L1', blockhigh: 'L1+up', evade: 'R stick', jab: '□', cross: '△', lead_hook: 'R1+□', rear_hook: 'R1+△',
     uppercut: 'R1+✕', low_kick: '✕', body_kick: '○', head_kick: 'R1+○', shoot: 'L2', clinch: 'R1+L2', back: 'Stick ←', fwd: 'Stick →',
+    sideup: 'Stick ↑', sidedown: 'Stick ↓',
     knee: '✕', elbow: '□', trip: 'L2', pummel: 'R1', breakaway: 'R2', punch: '□', advance: 'L2', sweep: 'L2', submit: '○', getup: 'R2'
   }
 };
 
 const KEYMAP: Record<string, string> = {
   j: 'strike:jab', k: 'strike:cross', u: 'strike:lead_hook', i: 'strike:rear_hook', y: 'strike:uppercut',
-  l: 'strike:low_kick', o: 'strike:body_kick', p: 'strike:head_kick', arrowleft: 'step:-1', arrowright: 'step:1',
+  l: 'strike:low_kick', o: 'strike:body_kick', p: 'strike:head_kick',
   g: 'shoot', c: 'clinch', h: 'submit', r: 'getup'
 };
 const CLINCH_KEYS: Record<string, string> = { j: 'elbow', k: 'elbow', u: 'elbow', i: 'elbow', l: 'knee', o: 'knee', g: 'trip', c: 'pummel', r: 'breakaway' };
 const DIR_ZONE: Record<string, Zone> = { w: 'high', a: 'left', d: 'right', s: 'low' };
-const DIR_EVADE: Record<string, EvadeKind> = { w: 'sway', a: 'slip_left', d: 'slip_right', s: 'duck' };
 // Standard gamepad mapping. On a DualSense: 0 cross, 1 circle, 2 square, 3 triangle.
 const BTN = { cross: 0, circle: 1, square: 2, triangle: 3, l1: 4, r1: 5, l2: 6, r2: 7, options: 9, up: 12, down: 13, left: 14, right: 15 };
 
 interface Stick { left: boolean; right: boolean; up: boolean; down: boolean }
-const noStick: Stick = { left: false, right: false, up: false, down: false };
 
 export interface InputHooks {
   /** Only route input while the fight screen is showing. */
@@ -43,9 +42,9 @@ export class Input {
   private held = new Set<string>();
   private pad: Gamepad | null = null;
   private padPrev: boolean[] = [];
-  private stickPrev: Stick = noStick;
-  private rstickPrev: Stick = noStick;
   private padBlocked = false;
+  // The guard and lean last sent from each device, so held input only sends changes.
+  private sent = { keys: { guard: null as string | null, lean: '0,0' }, pad: { guard: null as string | null, lean: '0,0' } };
 
   constructor(private fight: Fight, private hooks: InputHooks) {}
 
@@ -83,9 +82,9 @@ export class Input {
       if (f.timing || f.sub) return f.command('time');
       if (f.mode === 'clinch') return f.command('cblock:' + (this.held.has('w') ? 'high' : 'body'));
       if (f.mode === 'ground') return f.command('block');
-      return f.command('block:' + this.heldDir(DIR_ZONE, 'body'));
+      return; // standing, the guard is held (see holdKeys)
     }
-    if (k === 'f' && f.mode === 'stand') return f.command('evade:' + this.heldDir(DIR_EVADE, 'duck'));
+    if (k === 'f' || k.startsWith('arrow')) return; // lean and footwork are held too
     if (f.mode === 'clinch') { if (CLINCH_KEYS[k]) f.command(CLINCH_KEYS[k]); return; }
     if (f.mode === 'ground') {
       if (k === 'j' || k === 'k') return f.command('punch');
@@ -96,6 +95,7 @@ export class Input {
 
   /** Read the controller once per frame. Uses button edges so a held button fires once. */
   poll() {
+    if (this.hooks.active()) this.holdKeys();
     let pads: (Gamepad | null)[] = [];
     try { pads = navigator.getGamepads ? [...navigator.getGamepads()] : []; }
     catch { if (!this.padBlocked) { this.padBlocked = true; this.setDevice('blocked'); } return; }
@@ -107,14 +107,39 @@ export class Input {
     if (now.some((b, i) => b && !was[i])) this.setDevice('pad', gp.id);
     const ax = gp.axes[0] || 0, ay = gp.axes[1] || 0;
     const stick: Stick = { left: ax < -0.55 || on(BTN.left), right: ax > 0.55 || on(BTN.right), up: ay < -0.55 || on(BTN.up), down: ay > 0.55 || on(BTN.down) };
-    const rx = gp.axes[2] || 0, ry = gp.axes[3] || 0;
-    const rs: Stick = { left: rx < -0.6, right: rx > 0.6, up: ry < -0.6, down: ry > 0.6 };
-    if (this.hooks.active()) this.padCommands(down, on, stick, rs);
-    this.padPrev = now; this.stickPrev = stick; this.rstickPrev = rs;
+    if (this.hooks.active()) this.padCommands(down, on, stick, gp.axes);
+    this.padPrev = now;
   }
 
-  private padCommands(down: (i: number) => boolean, on: (i: number) => boolean, stick: Stick, rs: Stick) {
-    const f = this.fight, sp = this.stickPrev, rp = this.rstickPrev;
+  /** Send a held guard or lean only when it changes. */
+  private send(dev: 'keys' | 'pad', guard: string | null, lean: string) {
+    const s = this.sent[dev];
+    if (guard !== s.guard) { this.fight.command('guard:' + (guard ?? 'off')); s.guard = guard; }
+    if (lean !== s.lean) { this.fight.command('lean:' + lean); s.lean = lean; }
+  }
+
+  /**
+   * Held keyboard controls, read every frame: Space + W/A/S/D holds the guard in a zone, F + any of W/A/S/D leans
+   * (combine them: S and A is a bob to the left), and the arrows keep stepping: left and right in and out,
+   * up and down around the opponent.
+   */
+  private holdKeys() {
+    const h = this.held, f = this.fight;
+    if (f.mode !== 'stand' || f.over) { this.send('keys', null, '0,0'); return; }
+    const guard = h.has(' ') ? this.heldDir(DIR_ZONE, 'body') : null;
+    let lx = 0, ly = 0;
+    if (h.has('f')) {
+      lx = (h.has('d') ? 1 : 0) - (h.has('a') ? 1 : 0);
+      ly = (h.has('w') ? 1 : 0) - (h.has('s') ? 1 : 0);
+      if (!lx && !ly) ly = -1;
+    }
+    this.send('keys', guard, `${lx},${ly}`);
+    const mx = (h.has('arrowright') ? 1 : 0) - (h.has('arrowleft') ? 1 : 0), mz = (h.has('arrowdown') ? 1 : 0) - (h.has('arrowup') ? 1 : 0);
+    if (mx || mz) f.command(`move:${mx},${mz}`);
+  }
+
+  private padCommands(down: (i: number) => boolean, on: (i: number) => boolean, stick: Stick, axes: readonly number[]) {
+    const f = this.fight;
     if (down(BTN.options)) return this.hooks.restart();
     if (f.timing || f.sub) { if (down(BTN.cross) || down(BTN.square)) f.command('time'); return; }
     if (f.mode === 'stand') {
@@ -124,14 +149,17 @@ export class Input {
       if (down(BTN.cross)) f.command(r1 ? 'strike:uppercut' : 'strike:low_kick');
       if (down(BTN.circle)) f.command(r1 ? 'strike:head_kick' : 'strike:body_kick');
       if (down(BTN.l2)) f.command(r1 ? 'clinch' : 'shoot');
-      for (const [dir, kind] of [['left', 'slip_left'], ['right', 'slip_right'], ['down', 'duck'], ['up', 'sway']] as const) {
-        if (rs[dir] && !rp[dir]) f.command('evade:' + kind);
-      }
-      if (down(BTN.r2)) f.command('evade:' + (stick.up ? 'sway' : stick.left ? 'slip_left' : stick.right ? 'slip_right' : 'duck'));
-      if (down(BTN.l1)) f.command('block:' + (stick.up ? 'high' : stick.left ? 'left' : stick.right ? 'right' : stick.down ? 'low' : 'body'));
-      else if (!on(BTN.l1) && !on(BTN.r2)) {
-        if (stick.left && !sp.left) f.command('step:-1');
-        if (stick.right && !sp.right) f.command('step:1');
+      // Guard: hold L1, aim it with the stick.
+      const guard = on(BTN.l1) ? (stick.up ? 'high' : stick.left ? 'left' : stick.right ? 'right' : stick.down ? 'low' : 'body') : null;
+      // Head movement: the right stick leans as far as you push it; or hold R2 and lean with the left stick.
+      const dz = (v: number) => (Math.abs(v) < 0.2 ? 0 : Math.round(v * 10) / 10);
+      let lx = dz(axes[2] || 0), ly = -dz(axes[3] || 0);
+      if (on(BTN.r2)) { lx = dz(axes[0] || 0); ly = -dz(axes[1] || 0); if (!lx && !ly) ly = -1; }
+      this.send('pad', guard, `${lx},${ly}`);
+      // Footwork: the left stick steps in, out and around.
+      if (!on(BTN.l1) && !on(BTN.r2)) {
+        const mx = stick.right ? 1 : stick.left ? -1 : 0, mz = stick.down ? 1 : stick.up ? -1 : 0;
+        if (mx || mz) f.command(`move:${mx},${mz}`);
       }
     } else if (f.mode === 'clinch') {
       if (down(BTN.l1)) f.command('cblock:' + (stick.up ? 'high' : 'body'));

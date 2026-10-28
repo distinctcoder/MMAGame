@@ -313,3 +313,11 @@
   .st-chapter li.next { border-color: var(--ink); box-shadow: inset 0 -3px 0 var(--red); } .st-chapter li.next em { color: var(--red); }
   .st-chapter li.locked { opacity: 0.55; }
   @media (max-width: 760px) { .st-grid { grid-template-columns: 1fr; } .st-vs b { font-size: 21px; } }
+
+  /* ----- Footing readout ----- */
+  .footing { display: flex; flex-wrap: wrap; gap: 4px; min-height: 18px; }
+  .footing span { font: 500 10px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 5px; border-radius: 3px;
+    background: var(--hud-bg); border: 1px solid var(--line); color: var(--muted); }
+  .footing span.good { color: var(--good); border-color: var(--good); }
+  .footing span.bad { color: var(--red); border-color: var(--red); }
+  @media (max-width: 600px) { .footing { display: none; } }
