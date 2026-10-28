@@ -18,9 +18,17 @@ const POLE_BIAS = 1.5;
 
 const RECOLOR = ['skin', 'hair', 'shorts', 'trim', 'glove', 'cuff'] as const;
 
+/** Load a .glb; if the host won't serve it, fall back to the base64 copy at `<url>.json` (written by scripts/artifact.mjs). */
 export async function loadFighterModel(url: string): Promise<THREE.Object3D> {
-  const gltf = await new GLTFLoader().loadAsync(url);
-  return gltf.scene;
+  try {
+    return (await new GLTFLoader().loadAsync(url)).scene;
+  } catch (err) {
+    const res = await fetch(url + '.json');
+    if (!res.ok) throw err;
+    const { glb } = await res.json() as { glb: string };
+    const bytes = Uint8Array.from(atob(glb), c => c.charCodeAt(0));
+    return parseFighterModel(bytes.buffer);
+  }
 }
 /** Parse a .glb already in memory (tests, or a file the player drops in). */
 export function parseFighterModel(data: ArrayBuffer): Promise<THREE.Object3D> {
