@@ -72,6 +72,10 @@ Most tuning is data, not code:
 
 `npm test` checks that every strike, pose, zone and style the data refers to exists and that every pose solves, so typos fail fast.
 
+## Art
+
+[`docs/MODEL_SPEC.md`](docs/MODEL_SPEC.md) is the brief for a 3D artist making the real fighter models: skeleton and joint positions, the poses the model must survive (with reference renders), materials the game recolors, shape keys, export settings and acceptance checks.
+
 ## Prototypes
 
 `art/` holds the earlier single-page prototypes, kept as reference. They are not part of the build.

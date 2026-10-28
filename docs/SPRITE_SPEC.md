@@ -1,5 +1,7 @@
 # Fighter sprite spec
 
+> Superseded: the game moved to toon-shaded 3D. See [MODEL_SPEC.md](MODEL_SPEC.md) for the fighter model brief. This spec is kept for the 2D prototype in `art/example-fighter/`.
+
 Fighters are not drawn frame by frame. Each fighter is a set of body-part drawings attached to a skeleton, and the game moves the skeleton. The same drawings cover every strike, takedown, ground position and submission, and gear swaps in by replacing one part.
 
 The working example is in [`art/example-fighter/`](../art/example-fighter). Run it with any static server, for example `npx serve art/example-fighter`, then open the page shown.
