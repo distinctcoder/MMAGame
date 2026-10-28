@@ -99,7 +99,7 @@
   .tug i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--red); }
 
   .prompt { font-weight: 600; min-height: 1.55em; }
-  .pads { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px 28px; align-items: start; }
+  .pads { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 14px 24px; align-items: start; }
   .group { display: grid; gap: 6px; min-width: 0; align-content: start; }
   .label { font: 500 11px/1 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
   .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -117,6 +117,7 @@
   .blockpad button { padding: 4px; font-size: 12px; display: grid; place-items: center; line-height: 1.15; }
   .blockpad .b-high { grid-area: 1 / 2; } .blockpad .b-left { grid-area: 2 / 1; } .blockpad .b-body { grid-area: 2 / 2; }
   .blockpad .b-right { grid-area: 2 / 3; } .blockpad .b-low { grid-area: 3 / 2; }
+  .blockpad .e-sway { grid-area: 1 / 2; } .blockpad .e-slip_left { grid-area: 2 / 1; } .blockpad .e-slip_right { grid-area: 2 / 3; } .blockpad .e-duck { grid-area: 3 / 2; }
   .device { display: inline-flex; gap: 8px; align-items: center; font: 500 12px/1.3 var(--mono); color: var(--muted); }
   .device i { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
   .device.on i { background: var(--good); }
@@ -188,6 +189,10 @@
         <span class="label">Block</span>
         <div class="blockpad" id="blockpad"></div>
       </div>
+      <div class="group" id="evade-group">
+        <span class="label">Head movement</span>
+        <div class="blockpad" id="evadepad"></div>
+      </div>
     </div>
     <div class="setup">
       <div class="field"><label class="label" for="style-red">Your style (Red)</label><select id="style-red"></select></div>
@@ -206,6 +211,11 @@
       <div class="table-wrap"><table id="controls"></table></div>
     </section>
     <section>
+      <h2>Defense chart</h2>
+      <p>Blocking is safe and lasts longer. Head movement is riskier: get it right and the strike misses completely, the attacker recovers slowly, and your counter comes out faster and hits harder than after a parry.</p>
+      <div class="table-wrap"><table id="defense"></table></div>
+    </section>
+    <section>
       <h2>Fight log</h2>
       <ol class="log" id="log"></ol>
     </section>
@@ -221,6 +231,7 @@ const ROUND = 90000, ROUNDS = 3;
 const LEVELS = { easy: { def: -22, aggr: 0.6, react: 1.35, grap: -12 }, normal: { def: 0, aggr: 1, react: 1, grap: 0 }, hard: { def: 14, aggr: 1.35, react: 0.8, grap: 10 } };
 const BLOCK_TABLE = { high: { high: 0 }, left: { left: 0, high: 0.5 }, right: { right: 0, high: 0.5 }, body: { body: 0 }, low: { low: 0 } };
 const KICK_THROUGH = 0.2;
+const EVADED = { slip_left: 'Slipped', slip_right: 'Slipped', duck: 'Ducked', sway: 'Swayed' };
 const POS_MULT = { guard: 0.6, side: 1, mount: 1.25 };
 const NEXT = { guard: 'side', side: 'mount' };
 const SWEEP = {
@@ -270,7 +281,7 @@ function resolveStand(f, name) {
   const point = spec => {
     if (spec.h) return add(base, Qy, spec.h);
     if (spec.hc) return add(j.chest, Qy, spec.hc);
-    const name = spec.j.split('.')[1], oj = o.bodyJoints, oQy = qEuler([0, o.yaw, 0]);
+    const name = spec.j.split('.')[1], oj = (f.action?.type === 'strike' && f.action.aim) || o.bodyJoints, oQy = qEuler([0, o.yaw, 0]);
     return add(oj[name] || oj.pelvis, oQy, spec.o || [0, 0, 0]);
   };
   out.t = {}; out.p = {};
@@ -412,14 +423,16 @@ const speedMul = f => (1.25 - st(f).speed / 200) * (f.headHP < 30 ? 1.15 : 1);
 // ---------- Striking (standing) ----------
 function startStrike(f, key, chained) {
   const s = SD.strikes[key];
-  const counter = G.now < f.counterUntil, gassed = f.sta < s.cost;
+  const counter = G.now < f.counterUntil, counterMul = f.counterMul || 1.5, gassed = f.sta < s.cost;
   let windup = s.windup * speedMul(f) * (s.kick ? 1.15 - st(f).kicks / 400 : 1);
   if (chained) windup *= 0.8;
-  if (counter) windup *= 0.6;
+  if (counter) windup *= counterMul > 1.5 ? 0.5 : 0.6;
   if (gassed) windup *= 1.4;
   f.sta = Math.max(0, f.sta - s.cost);
   f.counterUntil = 0;
-  f.action = { type: 'strike', key, s, phase: 'wind', tHit: G.now + windup, counter, gassed };
+  // Strikes go where the target was when thrown, so head movement can make them miss.
+  const aim = Object.fromEntries(Object.entries(other(f).bodyJoints).map(([k, v]) => [k, v.clone()]));
+  f.action = { type: 'strike', key, s, phase: 'wind', tHit: G.now + windup, counter, counterMul, gassed, aim };
   stand(f, s.wind, Math.max(80, windup - 70));
   cpuSeesWindup(other(f), f, s, windup);
   if (!isHuman(f)) showTell(s);
@@ -431,6 +444,15 @@ function startBlock(f, zone) {
   f.action = { type: 'block', zone, t0: G.now, tEnd: G.now + win };
   f.sta = Math.max(0, f.sta - 1);
   stand(f, 'block_' + zone, 80);
+  return true;
+}
+// Head movement: a short window that makes the matching strikes miss entirely, then a brief recovery.
+function startEvade(f, kind) {
+  if (G.mode !== 'stand' || G.over || !['idle', 'block'].includes(f.action.type)) return false;
+  const active = 250 + st(f).evasion * 1.1 + (isHuman(f) ? 0 : LEVELS[G.level].def);
+  f.action = { type: 'evade', kind, t0: G.now, tActive: G.now + active, tEnd: G.now + active + (kind === 'duck' ? 230 : 190) };
+  f.sta = Math.max(0, f.sta - (kind === 'duck' ? 4 : 3));
+  stand(f, kind, 90);
   return true;
 }
 function startStep(f, dirn) {
@@ -456,7 +478,19 @@ function impact(att) {
   const dist = Math.abs(att.x - def.x);
   const at = def.bodyJoints[s.part === 'legs' ? 'lhip' : s.part === 'body' ? 'chest' : 'head'];
   if (dist < s.range[0] - 6 || dist > s.range[1]) { pop(at, 'Whiff', 'miss'); a.recoverMul = 1.6; return; }
-  let mult = 1, tag = null;
+  let mult = 1, tag = null, into = false;
+  if (def.action.type === 'evade' && G.now <= def.action.tActive) {
+    const m = (s.evade || {})[def.action.kind];
+    if (m === 0) {
+      pop(at, EVADED[def.action.kind] + '! Counter', 'gold');
+      a.recoverMul = 1.6;
+      def.counterUntil = G.now + 900; def.counterMul = 1.7;
+      rumble(0.15, 60);
+      G.lastAction = G.now;
+      return;
+    }
+    if (m !== undefined) { mult = m; into = m > 1; }
+  }
   if (def.action.type === 'block') {
     const m = BLOCK_TABLE[s.zone][def.action.zone];
     if (m !== undefined) {
@@ -465,13 +499,13 @@ function impact(att) {
       if (m === 0) {
         if (s.zone === 'low') { att.legs = Math.min(100, att.legs + 6); tag = ['Checked', 'block']; }
         else tag = [perfect ? 'Parry! Counter' : 'Blocked', perfect ? 'gold' : 'block'];
-        if (perfect) def.counterUntil = G.now + 900;
+        if (perfect) { def.counterUntil = G.now + 900; def.counterMul = 1.5; }
       } else tag = ['Partly blocked', 'block'];
     }
   }
   const sf = st(att);
   let dmg = s.dmg * (0.6 + sf.power / 100 * 0.6) * (s.kick ? 0.5 + sf.kicks / 100 * 0.7 : 1) * rand(0.9, 1.1) * mult;
-  if (a.counter) dmg *= 1.5;
+  if (a.counter) dmg *= a.counterMul;
   if (a.gassed) dmg *= 0.6;
   dmg = Math.round(dmg * 10) / 10;
   if (dmg >= 1) {
@@ -480,7 +514,7 @@ function impact(att) {
       stun(def, s.zone, dmg);
       G.shake = Math.min(10, dmg * 0.5);
       rumble(isHuman(def) ? 1 : 0.35, isHuman(def) ? 220 : 90);
-      if (!tag) tag = [(a.counter ? 'Counter ' : '') + Math.round(dmg), a.counter ? 'gold' : 'hit'];
+      if (!tag) tag = [(into ? 'Into it! ' : a.counter ? 'Counter ' : '') + Math.round(dmg), a.counter ? 'gold' : 'hit'];
       if (s.part === 'head' && dmg >= 9 && def.headHP < def.headMax * 0.4 && def.headHP > 0 && Math.random() < 0.45) { pop(at, tag[0], tag[1]); return knockdown(att, def); }
     }
   }
@@ -512,7 +546,12 @@ function updateStriker(f, dt) {
       stand(f, 'stance', dur);
     }
     if (a.phase === 'recover' && G.now >= a.tEnd) toIdle(f);
-  } else if (['block', 'stun', 'step'].includes(a.type) && G.now >= a.tEnd) {
+  } else if (a.type === 'evade' && !a.back && G.now >= a.tActive) {
+    a.back = true;
+    stand(f, 'stance', a.tEnd - a.tActive + 60);
+  }
+  if (a.type === 'evade' && G.now >= a.tEnd) toIdle(f);
+  else if (['block', 'stun', 'step'].includes(a.type) && G.now >= a.tEnd) {
     if (a.type !== 'step') stand(f, 'stance', 220);
     toIdle(f);
   }
@@ -523,6 +562,7 @@ function toIdle(f) {
     const q = f.queued; f.queued = null;
     if (q.kind === 'strike') startStrike(f, q.key, G.now - q.at < 600);
     else if (q.kind === 'block') startBlock(f, q.zone);
+    else if (q.kind === 'evade') startEvade(f, q.zone);
     else if (q.kind === 'shoot') shoot(f);
   }
 }
@@ -535,7 +575,7 @@ function weightedPick(mix, ok) {
   return items.length ? items[items.length - 1][0] : null;
 }
 function cpuStand(f) {
-  if (G.over || G.mode !== 'stand' || f.action.type !== 'idle' || G.now < f.nextThink) return;
+  if (G.over || G.mode !== 'stand' || f.action.type !== 'idle' || G.now < f.nextThink || window.__passiveCpu) return;
   const s = st(f), lv = LEVELS[G.level], o = other(f), dist = Math.abs(f.x - o.x);
   f.nextThink = G.now + rand(220, 520) / lv.aggr;
   if (G.now > G.nextShoot && dist < 110 && f.sta > 20 && Math.random() < s.takedowns / 100 * 0.16 * lv.aggr) { G.nextShoot = G.now + 4000; return shoot(f); }
@@ -551,6 +591,14 @@ function cpuSeesWindup(def, att, s, windup) {
   const lv = LEVELS[G.level], d = st(def).defense + lv.def;
   const delay = rand(160, 380) * (1.25 - d / 200) * lv.react;
   if (delay > windup - 40) return;
+  const dodges = Object.keys(s.evade || {}).filter(k => s.evade[k] === 0);
+  if (dodges.length && Math.random() < st(def).evasion / 100 * 0.6) {
+    const good = Math.random() < clamp(0.2 + (st(def).evasion + lv.def) / 140 + (windup - 250) / 800, 0.08, 0.9);
+    const others = Object.keys(SD.evades).filter(k => !dodges.includes(k));
+    const kind = good || !others.length ? dodges[Math.floor(Math.random() * dodges.length)] : others[Math.floor(Math.random() * others.length)];
+    def.plannedBlock = { at: att.action.tHit - Math.min(windup - delay, rand(70, 200)), evade: kind };
+    return;
+  }
   const correct = Math.random() < clamp(0.3 + d / 130 + (windup - 250) / 700, 0.08, 0.93);
   const zones = Object.keys(SD.zones).filter(z => z !== s.zone);
   def.plannedBlock = { at: att.action.tHit - Math.min(windup - delay, rand(90, 260)), zone: correct ? s.zone : zones[Math.floor(Math.random() * zones.length)] };
@@ -559,7 +607,7 @@ function cpuDefend(f) {
   const p = f.plannedBlock;
   if (!p || G.now < p.at) return;
   f.plannedBlock = null;
-  if (f.action.type === 'idle' || f.action.type === 'block') startBlock(f, p.zone);
+  if (f.action.type === 'idle' || f.action.type === 'block') p.evade ? startEvade(f, p.evade) : startBlock(f, p.zone);
 }
 
 // ---------- Contests (timing bar) ----------
@@ -913,6 +961,8 @@ function updateRef(rdt) {
 // ---------- Input: keyboard, on-screen and gamepad ----------
 const held = new Set();
 const DIR_ZONE = { w: 'high', a: 'left', d: 'right', s: 'low' };
+const DIR_EVADE = { w: 'sway', a: 'slip_left', d: 'slip_right', s: 'duck' };
+function heldEvade() { for (const k of ['w', 'a', 'd', 's']) if (held.has(k)) return DIR_EVADE[k]; return 'duck'; }
 function heldZone() { for (const k of ['w', 'a', 'd', 's']) if (held.has(k)) return DIR_ZONE[k]; return 'body'; }
 // One entry point for every device. cmd: strike:<key>, block:<zone>, step:<screen dir>, shoot, punch, advance, sweep, submit, getup, time.
 function command(cmd) {
@@ -929,6 +979,8 @@ function command(cmd) {
       else if (me.action.type === 'strike' && me.action.phase !== 'wind') me.queued = { kind: 'strike', key: arg, at: G.now };
     } else if (kind === 'block') {
       if (!startBlock(me, arg) && me.action.type === 'strike' && me.action.phase === 'recover') me.queued = { kind: 'block', zone: arg, at: G.now };
+    } else if (kind === 'evade') {
+      if (!startEvade(me, arg) && me.action.type === 'strike' && me.action.phase === 'recover') me.queued = { kind: 'evade', zone: arg, at: G.now };
     } else if (kind === 'step') startStep(me, +arg * me.dir);
     else if (kind === 'shoot') { if (me.action.type === 'idle') shoot(me); else if (me.action.type === 'strike') me.queued = { kind: 'shoot', at: G.now }; }
     return;
@@ -956,6 +1008,7 @@ addEventListener('keydown', e => {
     if (G.timing || G.sub) return command('time');
     return G.mode === 'ground' ? command('block') : command('block:' + heldZone());
   }
+  if (k === 'f' && G.mode === 'stand') return command('evade:' + heldEvade());
   if (G.mode === 'ground') {
     if (k === 'j' || k === 'k') return command('punch');
     if (k === 'g') return command(G.top === human() ? 'advance' : 'sweep');
@@ -991,8 +1044,13 @@ function pollPad() {
     if (down(BTN.cross)) command('strike:low_kick');
     if (down(BTN.circle)) command(r1 ? 'strike:head_kick' : 'strike:body_kick');
     if (down(BTN.l2)) command('shoot');
+    const rx = gp.axes[2] || 0, ry = gp.axes[3] || 0, rp = G.rstickPrev || {};
+    const rs = { left: rx < -0.6, right: rx > 0.6, up: ry < -0.6, down: ry > 0.6 };
+    for (const [dir, kind] of [['left', 'slip_left'], ['right', 'slip_right'], ['down', 'duck'], ['up', 'sway']]) if (rs[dir] && !rp[dir]) command('evade:' + kind);
+    G.rstickPrev = rs;
+    if (down(BTN.r2)) command('evade:' + (stick.up ? 'sway' : stick.left ? 'slip_left' : stick.right ? 'slip_right' : 'duck'));
     if (down(BTN.l1)) command('block:' + (stick.up ? 'high' : stick.left ? 'left' : stick.right ? 'right' : stick.down ? 'low' : 'body'));
-    else if (!on(BTN.l1)) {
+    else if (!on(BTN.l1) && !on(BTN.r2)) {
       if (stick.left && !sp.left) command('step:-1');
       if (stick.right && !sp.right) command('step:1');
     }
@@ -1016,8 +1074,8 @@ addEventListener('gamepaddisconnected', () => { G.pad = null; setDevice('keyboar
 // ---------- Device-aware labels ----------
 let device = 'keyboard';
 const LABELS = {
-  keyboard: { time: 'Space', block: 'Space', jab: 'J', cross: 'K', lead_hook: 'U', rear_hook: 'I', low_kick: 'L', body_kick: 'O', head_kick: 'P', shoot: 'G', punch: 'J', advance: 'G', sweep: 'G', submit: 'H', getup: 'R', back: '\u2190', fwd: '\u2192' },
-  pad: { time: '\u2715', block: 'L1', jab: '\u25a1', cross: '\u25b3', lead_hook: 'R1+\u25a1', rear_hook: 'R1+\u25b3', low_kick: '\u2715', body_kick: '\u25cb', head_kick: 'R1+\u25cb', shoot: 'L2', punch: '\u25a1', advance: 'L2', sweep: 'L2', submit: '\u25cb', getup: 'R2', back: 'Stick \u2190', fwd: 'Stick \u2192' }
+  keyboard: { time: 'Space', block: 'Space', jab: 'J', cross: 'K', lead_hook: 'U', rear_hook: 'I', low_kick: 'L', body_kick: 'O', head_kick: 'P', shoot: 'G', punch: 'J', advance: 'G', sweep: 'G', submit: 'H', getup: 'R', back: '\u2190', fwd: '\u2192', evade: 'F' },
+  pad: { time: '\u2715', block: 'L1', jab: '\u25a1', cross: '\u25b3', lead_hook: 'R1+\u25a1', rear_hook: 'R1+\u25b3', low_kick: '\u2715', body_kick: '\u25cb', head_kick: 'R1+\u25cb', shoot: 'L2', punch: '\u25a1', advance: 'L2', sweep: 'L2', submit: '\u25cb', getup: 'R2', back: 'Stick \u2190', fwd: 'Stick \u2192', evade: 'R stick' }
 };
 const keyName = k => LABELS[device === 'pad' ? 'pad' : 'keyboard'][k];
 function setDevice(kind, id) {
@@ -1044,7 +1102,8 @@ function pop(at, text, kind) {
 function showTell(s) {
   if (!G.tells) return;
   const z = SD.zones[s.zone];
-  $('tell').innerHTML = s.label + ' &middot; block <b>' + z.arrow + ' ' + z.label + '</b>';
+  const dodge = [...new Set(Object.keys(s.evade || {}).filter(k => s.evade[k] === 0).map(k => SD.evades[k].short))];
+  $('tell').innerHTML = s.label + ' &middot; block <b>' + z.arrow + ' ' + z.label + '</b>' + (dodge.length ? ' or ' + dodge.join(' / ') : '');
   $('tell').hidden = false;
 }
 function hideTell() { $('tell').hidden = true; }
@@ -1073,6 +1132,7 @@ function updateHud() {
   const c = Math.max(0, Math.ceil(G.clock / 1000));
   $('clock').innerHTML = '<small>R' + G.round + '</small>' + Math.floor(c / 60) + ':' + String(c % 60).padStart(2, '0');
   document.querySelectorAll('#blockpad button').forEach(b => b.classList.toggle('active', G.mode === 'stand' && F.red.action.type === 'block' && F.red.action.zone === b.dataset.zone));
+  document.querySelectorAll('#evadepad button').forEach(b => b.classList.toggle('active', G.mode === 'stand' && F.red.action.type === 'evade' && F.red.action.kind === b.dataset.kind));
 }
 
 // Contextual on-screen buttons. Each has a command and a label key for the keyboard or controller glyph.
@@ -1120,12 +1180,13 @@ function updateUI() {
     b.classList.toggle('hot', ctx === 'time');
   });
   $('block-group').hidden = ctx !== 'stand';
+  $('evade-group').hidden = ctx !== 'stand';
   $('pos').textContent = G.mode === 'ground' ? FD.pairs[G.pos].label + ' \u00b7 ' + G.top.name + ' on top' : G.mode === 'grapple' ? 'Scramble' : G.mode === 'break' ? 'Between rounds' : 'Standing';
   let msg;
   if (G.over) msg = 'Fight over. Restart to go again.';
   else if (G.timing) msg = G.timing.title + ' Press ' + keyName('time') + ' when the needle is in the green.';
   else if (G.sub) msg = 'Mash ' + keyName('time') + (G.sub.att === me ? ' to finish it.' : ' to escape.');
-  else if (G.mode === 'stand') msg = 'Strike, block with ' + keyName('block') + (device === 'pad' ? ' + stick direction' : ' + W/A/S/D') + ', or shoot a takedown with ' + keyName('shoot') + ' at close range.';
+  else if (G.mode === 'stand') msg = 'Strike, block with ' + keyName('block') + (device === 'pad' ? ' + stick' : ' + W/A/S/D') + ', slip or duck with ' + keyName('evade') + (device === 'pad' ? '' : ' + W/A/S/D') + ', or shoot a takedown with ' + keyName('shoot') + '.';
   else if (G.mode === 'ground' && G.top === me) msg = 'On top in ' + FD.pairs[G.pos].label.toLowerCase() + '. Punch, pass, ' + (canSubmit(me) ? 'armbar, ' : '') + 'or stand up.';
   else if (G.mode === 'ground') msg = 'On the bottom in ' + FD.pairs[G.pos].label.toLowerCase() + '. Block (' + keyName('block') + ') when they cock a punch, sweep, ' + (canSubmit(me) ? 'triangle, ' : '') + 'or get up.';
   else msg = '';
@@ -1137,6 +1198,7 @@ function buildControlsTable() {
     ['Jab / cross', L.jab + ' / ' + L.cross], ['Lead hook / rear hook', L.lead_hook + ' / ' + L.rear_hook],
     ['Low / body / head kick', L.low_kick + ' / ' + L.body_kick + ' / ' + L.head_kick],
     ['Block', kb ? 'Space + W high, A left, D right, S check (Space alone: body)' : 'L1 + stick up high, left, right, down check (L1 alone: body)'],
+    ['Head movement', kb ? 'F + W sway back, A slip left, D slip right, S duck (F alone: duck)' : 'Flick right stick: up sway back, left or right slip, down duck. Or R2 + left stick'],
     ['Move', kb ? '\u2190 / \u2192' : 'Left stick or d-pad'], ['Shoot takedown', L.shoot],
     ['Timing bar / mash', L.time], ['Ground and pound (top)', L.punch], ['Pass (top) / sweep (bottom)', L.advance],
     ['Submission', L.submit], ['Stand up / get up', L.getup], ['Block on the ground', L.block]
@@ -1144,6 +1206,28 @@ function buildControlsTable() {
   if (!kb) rows.push(['Restart', 'Options']);
   $('controls').innerHTML = '<thead><tr><th>Move</th><th>' + (kb ? 'Keyboard' : 'PS5 controller') + '</th></tr></thead><tbody>' +
     rows.map(r => '<tr><td>' + r[0] + '</td><td><kbd>' + r[1] + '</kbd></td></tr>').join('') + '</tbody>';
+}
+function buildEvadePad() {
+  const pad = $('evadepad');
+  for (const [kind, e] of Object.entries(SD.evades)) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'e-' + kind; b.dataset.kind = kind;
+    b.innerHTML = e.arrow + ' ' + e.label;
+    b.title = 'Dodges ' + Object.values(SD.strikes).filter(s => s.evade && s.evade[kind] === 0).map(s => s.label.toLowerCase()).join(', ');
+    b.addEventListener('pointerdown', ev => { ev.preventDefault(); command('evade:' + kind); });
+    pad.appendChild(b);
+  }
+}
+function buildDefenseChart() {
+  const group = (s, test) => Object.keys(s.evade || {}).filter(k => test(s.evade[k])).map(k => SD.evades[k].label.toLowerCase());
+  let html = '<thead><tr><th>Strike</th><th>Block</th><th>Head movement</th></tr></thead><tbody>';
+  for (const s of Object.values(SD.strikes)) {
+    const z = SD.zones[s.zone];
+    const parts = [['Dodge', group(s, m => m === 0)], ['Half damage', group(s, m => m > 0 && m < 1)], ['Avoid', group(s, m => m > 1)]].filter(([, l]) => l.length);
+    const evText = parts.length ? parts.map(([w, l]) => '<b>' + w + ':</b> ' + l.join(', ')).join('<br>') : 'Nothing dodges it. Check it.';
+    html += '<tr><td>' + s.label + '</td><td>' + z.arrow + ' ' + z.label + '</td><td>' + evText + '</td></tr>';
+  }
+  $('defense').innerHTML = html + '</tbody>';
 }
 function buildBlockPad() {
   const pad = $('blockpad');
@@ -1234,6 +1318,16 @@ function frame(real) {
   requestAnimationFrame(frame);
 }
 
+// Debug hooks for tests. __standPose('duck', 'rhook_hit', 70): Red holds a pose while Blue's strike aims where Red's stance head was.
+window.__standPose = (redPose, bluePose, dist) => {
+  gen++; G.over = true; G.mode = 'stand';
+  F.red.x = -dist / 2; F.blue.x = dist / 2;
+  for (const f of [F.red, F.blue]) { face(f); f.moveDur = 0; f.action = { type: 'done' }; f.shown = null; }
+  primeBodies();
+  for (const f of [F.red, F.blue]) { stand(f, 'stance', 0); f.shown = animState(f); f.bodyJoints = bodyJoints(f.shown); }
+  F.blue.action = { type: 'strike', aim: Object.fromEntries(Object.entries(F.red.bodyJoints).map(([k, v]) => [k, v.clone()])) };
+  stand(F.red, redPose, 0); stand(F.blue, bluePose, 0);
+};
 // Debug hooks for tests.
 window.__fight = () => ({ mode: G.mode, pos: G.pos, top: G.top?.name, round: G.round, over: G.over, busy: G.busy, timing: !!G.timing, sub: !!G.sub,
   red: { head: Math.round(F.red.headHP), sta: Math.round(F.red.sta), act: F.red.action.type }, blue: { head: Math.round(F.blue.headHP), sta: Math.round(F.blue.sta), act: F.blue.action.type } });
@@ -1261,7 +1355,7 @@ for (const c of ['red', 'blue']) {
 $('level').addEventListener('change', restart);
 $('tells').addEventListener('change', e => { G.tells = e.target.checked; if (!G.tells) hideTell(); });
 $('restart').addEventListener('click', restart);
-buildActions(); buildBlockPad(); buildControlsTable();
+buildActions(); buildBlockPad(); buildEvadePad(); buildDefenseChart(); buildControlsTable();
 restart();
 resize();
 camera.fov = 17.5;
