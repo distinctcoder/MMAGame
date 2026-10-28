@@ -11,6 +11,8 @@ import { repTitle } from './park/progress';
 import { buildPark, PLACES } from './park/world';
 import { V } from './rig/math';
 import { createStage, PALETTES, type Stage } from './rig/stage';
+import { StoryController } from './story/controller';
+import { champion } from './story/progress';
 import { TrainingController } from './training/controller';
 import { GameCamera } from './ui/camera';
 import { Hud } from './ui/hud';
@@ -18,7 +20,7 @@ import { Hud } from './ui/hud';
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
 let profile: Profile = loadProfile();
-type Screen = 'menu' | 'fight' | 'training' | 'park' | 'pickup';
+type Screen = 'menu' | 'fight' | 'training' | 'park' | 'pickup' | 'story' | 'bout';
 let screen: Screen = 'menu';
 /** The park fighter for the current or next pickup fight. */
 let pickupId = '';
@@ -42,7 +44,8 @@ const fight = new Fight(meshes, {
   ended: onEnded,
   event: e => { if (screen === 'training') training.onEvent(e); }
 });
-input = new Input(fight, { active: () => screen === 'fight' || screen === 'training' || screen === 'pickup', deviceChanged, restart });
+const FIGHTING: Screen[] = ['fight', 'training', 'pickup', 'bout'];
+input = new Input(fight, { active: () => FIGHTING.includes(screen), deviceChanged, restart });
 hud = new Hud(fight, input, stage.camera);
 const camera = new GameCamera(stage.camera, stage.panels);
 const store = { get: () => profile, set: (p: Profile) => { profile = p; saveProfile(p); renderProfile(); } };
@@ -50,12 +53,19 @@ training = new TrainingController(fight, input, hud, store);
 const park = new ParkController(stage, buildPark(stage), meshes.red, meshes.blue, meshes.ref, () => stage.makeFighter(PALETTES.blue), camera, {
   ...store,
   device: () => input.device,
-  startDrill(id) { training.drillId = id; training.fromPark = true; location.hash = '#training'; },
+  startDrill(id) { training.drillId = id; training.returnTo = 'park'; location.hash = '#training'; },
   startPickup(id) {
     pickupId = id;
     if (screen === 'pickup') restart(); else location.hash = '#pickup';
   }
 });
+const story = new StoryController(meshes.blue, {
+  ...store,
+  startDrill(id) { training.drillId = id; training.returnTo = 'story'; location.hash = '#training'; },
+  startBout() { location.hash = '#bout'; }
+});
+// A drill run from a story camp uses a camp session.
+training.onDrillEnd = id => { if (training.returnTo === 'story') story.drillDone(id); };
 
 // ---------- Profile and setup ----------
 function fillStyles(sel: HTMLSelectElement, value: string) {
@@ -75,6 +85,8 @@ function renderProfile() {
   $('p-record').textContent = `${r.wins}-${r.losses}-${r.draws}`;
   $('p-cash').textContent = '$' + profile.park.cash.toLocaleString('en-US');
   $('p-rep').textContent = `Rep ${profile.park.rep} · ${repTitle(profile.park)}`;
+  const st = profile.story;
+  $('story-tag').textContent = champion(st) ? 'Champion' : st.next || st.history.length ? 'Continue' : 'Play';
   const list = $('p-history');
   list.innerHTML = '';
   for (const h of profile.history) {
@@ -110,13 +122,14 @@ $('tells').addEventListener('change', e => {
 $('restart').addEventListener('click', restart);
 
 function onEnded(winner: Color | null, how: string) {
-  if (screen !== 'fight' && screen !== 'pickup') return;
+  if (screen !== 'fight' && screen !== 'pickup' && screen !== 'bout') return;
   const result = winner === 'red' ? 'win' : winner ? 'loss' : 'draw';
-  const opponent = screen === 'pickup' ? `${fight.blue.name} (park)` : SD.styles[profile.opponentStyle].label;
+  const opponent = screen === 'pickup' ? `${fight.blue.name} (park)` : screen === 'bout' ? `${fight.blue.name} (story)` : SD.styles[profile.opponentStyle].label;
   profile = recordFight(profile, result, how, opponent);
   saveProfile(profile);
   renderProfile();
   if (screen === 'pickup') park.endPickup(winner);
+  if (screen === 'bout') story.endBout(winner, how);
 }
 
 function deviceChanged(kind: Device, id?: string) {
@@ -133,6 +146,14 @@ function deviceChanged(kind: Device, id?: string) {
 function restart() {
   if (screen === 'training') training.start();
   else if (screen === 'pickup') { hud.clearLog(); hud.clearBanner(); fight.tells = profile.tells; if (!park.startPickup(fight, pickupId)) location.hash = '#park'; }
+  else if (screen === 'bout') {
+    // The result is already on the record; a finished bout goes back to camp rather than straight into the next one.
+    if (fight.over && !$('bout-result').hidden) { location.hash = '#story'; return; }
+    hud.clearLog(); hud.clearBanner(); fight.tells = profile.tells;
+    if (!story.startBout(fight)) { location.hash = '#story'; return; }
+    const o = fight.blue;
+    hud.banner(o.name, `${profile.name} vs ${o.name} \u00b7 ${$('screen-label').textContent}`, 1800);
+  }
   else if (screen === 'fight') startFight();
 }
 function startFight() {
@@ -149,30 +170,40 @@ function resize() {
   stage.camera.aspect = w / h;
   stage.camera.updateProjectionMatrix();
 }
-const SCREENS: Record<string, Screen> = { '#fight': 'fight', '#training': 'training', '#park': 'park', '#pickup': 'pickup' };
-const LABELS: Record<Screen, string> = { menu: '', fight: 'Fight night \u00b7 3 rounds', training: 'Training', park: 'The park', pickup: 'Pickup fight \u00b7 1 round' };
+const SCREENS: Record<string, Screen> = { '#fight': 'fight', '#training': 'training', '#park': 'park', '#pickup': 'pickup', '#story': 'story', '#bout': 'bout' };
+const LABELS: Record<Screen, string> = {
+  menu: '', story: '', fight: 'Fight night \u00b7 3 rounds', training: 'Training', park: 'The park', pickup: 'Pickup fight \u00b7 1 round', bout: ''
+};
 function route() {
   let next: Screen = SCREENS[location.hash] || 'menu';
   if (next === 'pickup' && !PARK_FIGHTER_BY_ID[pickupId]) { location.replace('#park'); next = 'park'; }
-  if (next === screen && next === 'menu') return;
+  if (next === 'bout' && screen !== 'story' && screen !== 'bout') { location.replace('#story'); next = 'story'; }
+  if (next === screen && (next === 'menu' || next === 'story')) return;
   const prev = screen;
-  if (next !== 'training' && next !== 'park') training.fromPark = false;
+  if (next !== 'training' && next !== 'park' && next !== 'story') training.returnTo = null;
+  const fightScreen = next !== 'menu' && next !== 'story';
   $('menu').hidden = next !== 'menu';
-  $('fight-screen').hidden = next === 'menu';
+  $('story-screen').hidden = next !== 'story';
+  $('fight-screen').hidden = !fightScreen;
   $('fight-screen').dataset.screen = next;
   $('training-panel').hidden = next !== 'training';
-  $('screen-label').textContent = LABELS[next];
-  $('restart').textContent = next === 'training' ? 'Restart drill' : next === 'pickup' ? 'Restart' : 'Restart fight';
+  const bout = next === 'bout' ? story.upcoming() : null;
+  $('screen-label').textContent = bout ? `${bout.event} \u00b7 ${bout.rounds} rounds` : LABELS[next];
+  $('restart').textContent = next === 'training' ? 'Restart drill' : next === 'pickup' || next === 'bout' ? 'Restart' : 'Restart fight';
   document.querySelector<HTMLLabelElement>('label[for="style-blue"]')!.textContent = next === 'training' ? 'Partner style' : 'CPU style';
-  const toPark = next === 'pickup' || (next === 'training' && training.fromPark);
-  $<HTMLAnchorElement>('back').href = toPark ? '#park' : '#';
-  $('back').innerHTML = toPark ? '&larr; Park' : '&larr; Menu';
+  const backTo = next === 'pickup' || (next === 'training' && training.returnTo === 'park') ? 'park'
+    : next === 'bout' || (next === 'training' && training.returnTo === 'story') ? 'story' : null;
+  $<HTMLAnchorElement>('back').href = backTo ? '#' + backTo : '#';
+  $('back').innerHTML = backTo === 'park' ? '&larr; Park' : backTo === 'story' ? '&larr; Camp' : '&larr; Menu';
   screen = next;
   if (prev === 'park') { park.leave(); camera.snap(V(70, 128, 820), V(0, 102, 0), 17.5); }
   if (prev === 'pickup') park.endPickupScreen();
+  if (prev === 'bout') story.endBoutScreen();
+  if (prev === 'story') story.leave();
   if (next !== 'training') training.stop();
   hud.tell(null);
   if (screen === 'menu') { renderProfile(); window.scrollTo(0, 0); return; }
+  if (screen === 'story') { story.enter(); window.scrollTo(0, 0); return; }
   resize();
   if (screen === 'park') {
     hud.clearBanner();
@@ -180,7 +211,7 @@ function route() {
     const from = prev === 'pickup' ? 'court' : prev === 'training' ? 'gym' : null;
     park.enter(from ? PLACES.find(p => p.id === from)!.x : undefined);
   } else if (screen === 'training') training.start();
-  else if (screen === 'pickup') restart();
+  else if (screen === 'pickup' || screen === 'bout') restart();
   else startFight();
   window.scrollTo(0, 0);
 }
@@ -193,10 +224,11 @@ function frame(real: number) {
   const rdt = Math.min(50, real - last);
   last = real;
   input.poll();
+  if (screen === 'story') story.poll();
   if (screen === 'park') {
     park.frame(real, rdt);
     stage.renderer.render(stage.scene, stage.camera);
-  } else if (screen !== 'menu') {
+  } else if (FIGHTING.includes(screen)) {
     fight.update(real, rdt);
     fight.animate();
     camera.update(fight, rdt);
@@ -237,7 +269,8 @@ renderProfile();
 training.build();
 park.build();
 park.dressPlayer();
-$('r-park').addEventListener('click', () => { location.hash = '#park'; });
+story.build();
+$('r-park').addEventListener('click', () => { location.hash = training.returnTo === 'story' ? '#story' : '#park'; });
 $('status').hidden = true;
 route();
 requestAnimationFrame(frame);

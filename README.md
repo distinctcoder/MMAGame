@@ -1,6 +1,6 @@
 # 2DMMAGame
 
-A browser MMA game with toon-shaded 3D fighters that read as 2D art, with a fight mode, a training mode and a park hub: striking with zone blocks and head movement, the clinch, three-phase takedowns, a ground game with sweeps and submissions, a referee, and three-round fights. Plays with keyboard, touch, or a PS5 DualSense.
+A browser MMA game with toon-shaded 3D fighters that read as 2D art, with a quick fight mode, training, a park hub and a story career: striking with zone blocks and head movement, the clinch, three-phase takedowns, a ground game with sweeps and submissions, a referee, and three-round fights. Plays with keyboard, touch, or a PS5 DualSense.
 
 ## Getting started
 
@@ -35,8 +35,10 @@ src/training/            training mode: drills.ts (drill and partner definitions
                         controller.ts (runs drills, drill HUD, results, best scores)
 src/park/                the park hub: data.ts (gear, classes, the pickup ladder, what drills train), progress.ts (pure
                         cash, rep, XP and gear rules), world.ts (the street scene), walk.ts (walk cycle), controller.ts (the screen)
-src/profile/profile.ts  your fighter (name, styles, record, best drill scores, park progress), saved in the browser
-tests/                  rules.test.ts (fight rules), data.test.ts (data integrity), training.test.ts (drill scoring and placement), park.test.ts (progression)
+src/story/               story mode: data.ts (chapters, bouts, opponents, dialogue), progress.ts (pure career and camp
+                        rules), controller.ts (the story screen and bout flow)
+src/profile/profile.ts  your fighter (name, styles, record, best drill scores, park and story progress), saved in the browser
+tests/                  rules.test.ts (fight rules), data.test.ts (data integrity), training.test.ts (drill scoring and placement), park.test.ts and story.test.ts (progression)
 ```
 
 The fight logic never touches the DOM. It reports what happened through the `FightEvents` interface (pops, banners, log lines, rumble), which the HUD and input modules implement. That keeps the rules testable and lets new screens, such as training mode, drive the same fight.
@@ -51,6 +53,12 @@ Walk the street (arrows or A/D, Shift to jog, or the on-screen buttons) and step
 
 Training and gear only count in park fights; quick fights and training drills use the plain styles.
 
+## Story mode
+
+Eight fights across three chapters: the amateur circuit (three one-minute rounds), the regional pro cards (three 90-second rounds) and the title run, which ends with five rounds for the belt. Victor Kane, the rival, shows up in the amateur final and again in the title eliminator.
+
+Before each fight there is a camp with a few sessions. Each drill or class uses one; classes are free in camp, and the coach marks the drills that suit the opponent. The fight card shows a tale of the tape (your stats with training and gear against theirs) and a scouting report. Wins pay the purse and add park rep; a loss pays show money and sends you back to camp for the rematch. Story mode shares stats, gear and cash with the park.
+
 ## Tuning the game
 
 Most tuning is data, not code:
@@ -59,6 +67,7 @@ Most tuning is data, not code:
 - **`src/data/fight.json`**: paired poses for the clinch, takedowns, ground positions and submissions.
 - **`src/fight/rules.ts`**: the formulas and constants (block table, counter windows, damage scaling, contest math, judging).
 - **`src/park/data.ts`**: park prices, gear bonuses, class XP, level costs, the pickup ladder (rep needed, purse, stat boosts) and payouts.
+- **`src/story/data.ts`**: story bouts (opponent, boosts, rounds, purse, camp length, scouting) and all the dialogue.
 - **`src/training/drills.ts`**: training drills (length, partner, partner behavior, points per outcome), sparring partner behaviors and the combo list.
 
 `npm test` checks that every strike, pose, zone and style the data refers to exists and that every pose solves, so typos fail fast.

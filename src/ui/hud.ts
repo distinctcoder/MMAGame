@@ -95,8 +95,9 @@ export class Hud {
       $(x.color + '-sta').style.width = x.sta + '%';
       $(x.color + '-body').textContent = String(Math.round(x.body));
       $(x.color + '-legs').textContent = String(Math.round(x.legs));
-      const name = $(x.color + '-name');
+      const name = $(x.color + '-name'), style = $(x.color + '-style'), label = f.style(x).label;
       if (name.textContent !== x.name) name.textContent = x.name;
+      if (style.textContent !== label) style.textContent = label;
     }
     const c = Math.max(0, Math.ceil(f.clock / 1000));
     $('clock').innerHTML = `<small>R${f.round}</small>${Math.floor(c / 60)}:${String(c % 60).padStart(2, '0')}`;

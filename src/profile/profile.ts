@@ -1,6 +1,7 @@
 // Your fighter: name, style, preferences and fight record. Saved in this browser only.
 import type { Level } from '../fight/rules';
 import { defaultPark, normalizePark, type ParkState } from '../park/progress';
+import { defaultStory, normalizeStory, type StoryState } from '../story/progress';
 
 export interface FightRecord { date: string; opponent: string; result: 'win' | 'loss' | 'draw'; how: string }
 export interface Profile {
@@ -17,13 +18,15 @@ export interface Profile {
   sparBehavior: string;
   /** Cash, rep, training levels and gear from the park. */
   park: ParkState;
+  /** Story mode career. */
+  story: StoryState;
 }
 
 const KEY = 'mma-game.profile.v1';
 const HISTORY = 8;
 
 export function defaultProfile(): Profile {
-  return { name: 'Red', style: 'muay_thai', opponentStyle: 'wrestling', level: 'normal', tells: true, record: { wins: 0, losses: 0, draws: 0 }, history: [], training: {}, sparBehavior: 'normal', park: defaultPark() };
+  return { name: 'Red', style: 'muay_thai', opponentStyle: 'wrestling', level: 'normal', tells: true, record: { wins: 0, losses: 0, draws: 0 }, history: [], training: {}, sparBehavior: 'normal', park: defaultPark(), story: defaultStory() };
 }
 
 /** Reads the saved profile. Storage can be missing or blocked (private windows, previews), so this never throws. */
@@ -33,7 +36,7 @@ export function loadProfile(): Profile {
     if (!raw) return defaultProfile();
     const saved = JSON.parse(raw) as Partial<Profile>;
     const base = defaultProfile();
-    return { ...base, ...saved, record: { ...base.record, ...saved.record }, history: Array.isArray(saved.history) ? saved.history : [], training: { ...saved.training }, park: normalizePark(saved.park) };
+    return { ...base, ...saved, record: { ...base.record, ...saved.record }, history: Array.isArray(saved.history) ? saved.history : [], training: { ...saved.training }, park: normalizePark(saved.park), story: normalizeStory(saved.story) };
   } catch {
     return defaultProfile();
   }

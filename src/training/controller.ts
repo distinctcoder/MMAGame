@@ -15,8 +15,10 @@ export interface ProfileStore { get(): Profile; set(p: Profile): void }
 
 export class TrainingController {
   drillId: DrillId = 'spar';
-  /** Set when the drill was started from the park gym; shows a way back. */
-  fromPark = false;
+  /** Set when the drill was started from the park gym or a story fight camp; shows a way back. */
+  returnTo: 'park' | 'story' | null = null;
+  /** Called when a scored drill finishes. */
+  onDrillEnd?: (id: DrillId, score: number) => void;
   private session: Session | null = null;
   private ended = false;
   private flashTimer = 0;
@@ -78,7 +80,8 @@ export class TrainingController {
     $('box').classList.add('training-on');
     $('drill-hud').hidden = false;
     $('results').hidden = true;
-    $('r-park').hidden = !this.fromPark;
+    $('r-park').hidden = !this.returnTo;
+    $('r-park').textContent = this.returnTo === 'story' ? 'Back to camp' : 'Back to the park';
     $('dh-last').textContent = '';
     this.hud.log(d.name, d.kind === 'spar' ? SPAR_BEHAVIORS[p.sparBehavior]?.label : d.blurb);
     this.renderPanel();
@@ -154,6 +157,7 @@ export class TrainingController {
     $('r-detail').textContent = d.kind === 'combo' ? `${s.combo!.done} combos landed. Best run: ${s.bestStreak} in a row.`
       : `${tally.join(', ')}. Best streak: ${s.bestStreak}.`;
     $('results').hidden = false;
+    this.onDrillEnd?.(d.id, s.score);
     this.hud.log(`${d.name}: ${s.score} points`, best ? 'New best' : `Best ${profile.training[d.id]}`);
     this.renderPanel();
   }

@@ -221,7 +221,7 @@
   .park-hud, .park-prompt, .park-touch, .park-panel { display: none; }
   [data-screen="park"] .hud, [data-screen="park"] .prompt, [data-screen="park"] .pads, [data-screen="park"] .setup,
   [data-screen="park"] .three, [data-screen="park"] .banner, [data-screen="park"] .tell { display: none; }
-  [data-screen="pickup"] .fight-only { display: none; }
+  [data-screen="pickup"] .fight-only, [data-screen="bout"] .fight-only { display: none; }
   .canvas-col { display: grid; gap: 10px; min-width: 0; align-content: start; }
   [data-screen="park"] .stage { grid-template-columns: minmax(0, 1.55fr) minmax(300px, 1fr); align-items: start; gap: 16px; }
   [data-screen="park"] .park-hud { display: grid; position: absolute; top: 10px; left: 10px; gap: 2px; padding: 7px 10px; border-radius: 4px;
@@ -267,3 +267,44 @@
   #pickup-result .r-score b { font-size: 34px; text-transform: uppercase; }
   @media (max-width: 860px) { [data-screen="park"] .stage { grid-template-columns: 1fr; } [data-screen="park"] .park-panel { max-height: none; } }
   @media (max-width: 600px) { .pk-card { grid-template-columns: 1fr 1fr; } .pk-card > div:first-child { grid-column: 1 / -1; } }
+
+  /* ----- Story ----- */
+  .story { display: grid; gap: 22px; }
+  .st-head { display: grid; gap: 10px; }
+  .st-talk { display: grid; gap: 10px; padding: 16px 18px; border-radius: 6px; background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--red); }
+  .st-talk p { display: grid; gap: 2px; max-width: 70ch; font-size: 16px; }
+  .st-talk p b { font: 500 11px/1.2 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .st-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  .st-card { display: grid; gap: 12px; padding: 16px; border-radius: 6px; background: var(--surface); border: 1px solid var(--line); min-width: 0; }
+  .st-card h3 { margin: 4px 0 0; font: 700 17px/1 var(--display); text-transform: uppercase; letter-spacing: 0.03em; }
+  .st-event { display: flex; gap: 10px; justify-content: space-between; align-items: baseline; flex-wrap: wrap; }
+  .st-event .muted { font: 500 12px/1.3 var(--mono); }
+  .st-vs { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; }
+  .st-vs > div { display: grid; gap: 4px; min-width: 0; }
+  .st-vs > div:last-child { text-align: right; }
+  .st-vs b { font: 800 26px/1 var(--display); text-transform: uppercase; }
+  .st-vs b.red { color: var(--red); } .st-vs b.blue { color: var(--blue); }
+  .st-vs .muted { font-size: 13px; }
+  .st-vs .vs { font: 800 18px/1 var(--display); color: var(--muted); text-transform: uppercase; }
+  table.tape th { text-align: center; border-top: 1px solid var(--line); padding: 6px 0; }
+  table.tape td { padding: 6px 0; width: 30%; color: var(--muted); }
+  table.tape td:last-child { text-align: right; }
+  table.tape td.up { color: var(--ink); font-weight: 600; }
+  .st-scout { display: grid; gap: 4px; font-size: 14px; }
+  .st-fight { justify-self: stretch; padding: 14px; font-size: 16px; }
+  a.btn { font: 600 14px/1 var(--body); text-decoration: none; padding: 10px 12px; border-radius: 4px; border: 1px solid var(--ink); background: var(--ink); color: var(--bg); }
+  .pips { display: inline-flex; gap: 4px; }
+  .pips i { width: 14px; height: 14px; border-radius: 3px; background: var(--gold); }
+  .pips i.used { background: var(--track); }
+  .st-champ h2 { font-size: 44px; color: var(--gold); }
+  .st-ladder { display: grid; gap: 12px; }
+  .st-chapter { display: grid; gap: 6px; }
+  .st-chapter ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+  .st-chapter li { display: grid; gap: 2px; padding: 10px 12px; border-radius: 4px; border: 1px solid var(--line); background: var(--surface); position: relative; }
+  .st-chapter li span:first-child { font-weight: 600; }
+  .st-chapter li .muted { font-size: 12px; }
+  .st-chapter li em { position: absolute; top: 8px; right: 10px; font: 500 10px/1 var(--mono); font-style: normal; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .st-chapter li.won { border-color: var(--good); } .st-chapter li.won em { color: var(--good); }
+  .st-chapter li.next { border-color: var(--ink); box-shadow: inset 0 -3px 0 var(--red); } .st-chapter li.next em { color: var(--red); }
+  .st-chapter li.locked { opacity: 0.55; }
+  @media (max-width: 760px) { .st-grid { grid-template-columns: 1fr; } .st-vs b { font-size: 21px; } }

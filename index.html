@@ -36,11 +36,11 @@
         <span class="mode-text">Walk the street, train at the gym, buy gear and take pickup fights for cash and rep.</span>
         <span class="mode-tag">Play</span>
       </a>
-      <div class="mode off" aria-disabled="true">
+      <a class="mode" href="#story" id="go-story">
         <span class="mode-name">Story</span>
-        <span class="mode-text">Amateur bouts to a title shot, with camps and rivals.</span>
-        <span class="mode-tag">Planned</span>
-      </div>
+        <span class="mode-text">From amateur night to a five-round title fight, with a fight camp before every bout and a rival who won't go away.</span>
+        <span class="mode-tag" id="story-tag">Play</span>
+      </a>
     </div>
 
     <section class="profile">
@@ -57,6 +57,12 @@
       <ol class="history" id="p-history"></ol>
       <p class="muted small">Saved in this browser only.</p>
     </section>
+  </section>
+
+  <!-- ===== Story ===== -->
+  <section class="screen" id="story-screen" hidden>
+    <div class="topbar"><a class="back" href="#">&larr; Menu</a><span class="eyebrow">Story</span></div>
+    <div class="story" id="story-root"></div>
   </section>
 
   <!-- ===== Fight ===== -->
@@ -109,6 +115,12 @@
           <div class="pr-pay"><span id="pr-cash"></span><span id="pr-rep"></span></div>
           <p id="pr-detail"></p>
           <div class="row"><button type="button" id="pr-park">Back to the park</button><button type="button" id="pr-again">Run it back</button></div>
+        </div>
+        <div class="results" id="bout-result" hidden>
+          <div class="r-score"><b id="br-title"></b></div>
+          <div class="pr-pay"><span id="br-pay"></span></div>
+          <p id="br-detail"></p>
+          <div class="row"><button type="button" id="br-go" class="hot">Continue</button></div>
         </div>
         <div class="park-hud" id="park-hud"></div>
         <div class="park-prompt" id="park-prompt" hidden></div>
