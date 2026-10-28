@@ -10,7 +10,8 @@ import { PARK_FIGHTER_BY_ID } from './park/data';
 import { repTitle } from './park/progress';
 import { buildPark, PLACES } from './park/world';
 import { V } from './rig/math';
-import { createStage, PALETTES, type Stage } from './rig/stage';
+import { loadFighterModel, ModelBody } from './rig/model';
+import { createStage, PALETTES, type Fighter3D, type Stage } from './rig/stage';
 import { StoryController } from './story/controller';
 import { champion } from './story/progress';
 import { TrainingController } from './training/controller';
@@ -29,6 +30,28 @@ let stage: Stage;
 try { stage = createStage($<HTMLCanvasElement>('stage')); }
 catch (err) { $('status').textContent = 'This browser could not start WebGL, which the 3D view needs.'; throw err; }
 const meshes = { red: stage.makeFighter(PALETTES.red), blue: stage.makeFighter(PALETTES.blue), ref: stage.makeFighter(PALETTES.ref) };
+/** Every fighter that can wear the rigged model (the referee keeps the shapes: the test model has no referee outfit). */
+const wearers: Fighter3D[] = [meshes.red, meshes.blue];
+
+// ---------- Fighter look ----------
+const MODEL_URL = 'models/fighter_test.glb';
+let modelTemplate: Promise<import('three').Object3D> | null = null;
+let modelReady: import('three').Object3D | null = null;
+function applyLook(f: Fighter3D) {
+  const tpl = profile.look === 'model' ? modelReady : null;
+  f.setModel(tpl ? pal => new ModelBody(tpl, stage.toon, pal) : null);
+}
+/** Switch every fighter to the profile's look, loading the model file the first time it's needed. */
+function setLook() {
+  if (profile.look === 'model' && !modelReady) {
+    modelTemplate ??= loadFighterModel(MODEL_URL);
+    modelTemplate.then(t => { modelReady = t; wearers.forEach(applyLook); })
+      .catch(err => { console.error('Could not load the fighter model', err); modelTemplate = null; document.getElementById('look-note')!.textContent = 'The test model could not be loaded. Using the classic shapes.'; });
+    return;
+  }
+  wearers.forEach(applyLook);
+}
+
 
 let hud: Hud;
 let input: Input;
@@ -50,7 +73,8 @@ hud = new Hud(fight, input, stage.camera);
 const camera = new GameCamera(stage.camera, stage.panels);
 const store = { get: () => profile, set: (p: Profile) => { profile = p; saveProfile(p); renderProfile(); } };
 training = new TrainingController(fight, input, hud, store);
-const park = new ParkController(stage, buildPark(stage), meshes.red, meshes.blue, meshes.ref, () => stage.makeFighter(PALETTES.blue), camera, {
+const makeNpc = () => { const f = stage.makeFighter(PALETTES.blue); wearers.push(f); applyLook(f); return f; };
+const park = new ParkController(stage, buildPark(stage), meshes.red, meshes.blue, meshes.ref, makeNpc, camera, {
   ...store,
   device: () => input.device,
   startDrill(id) { training.drillId = id; training.returnTo = 'park'; location.hash = '#training'; },
@@ -79,6 +103,7 @@ function renderProfile() {
   fillStyles($('style-red'), profile.style);
   fillStyles($('style-blue'), profile.opponentStyle);
   $<HTMLSelectElement>('p-level').value = profile.level;
+  $<HTMLSelectElement>('p-look').value = profile.look;
   $<HTMLSelectElement>('level').value = profile.level;
   $<HTMLInputElement>('tells').checked = profile.tells;
   const r = profile.record;
@@ -114,6 +139,11 @@ for (const [id, key] of [['p-style', 'style'], ['style-red', 'style'], ['p-opp',
     if (screen !== 'menu') restart();
   });
 }
+$('p-look').addEventListener('change', e => {
+  update({ look: (e.target as HTMLSelectElement).value === 'model' ? 'model' : 'shapes' });
+  $('look-note').textContent = '';
+  setLook();
+});
 $('tells').addEventListener('change', e => {
   update({ tells: (e.target as HTMLInputElement).checked });
   fight.tells = profile.tells;
@@ -266,6 +296,7 @@ hud.buildPads();
 hud.buildDefenseChart();
 hud.buildControlsTable();
 renderProfile();
+setLook();
 training.build();
 park.build();
 park.dressPlayer();

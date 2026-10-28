@@ -20,6 +20,11 @@ export interface FighterMesh {
   setPalette(pal: Palette): void;
   root: THREE.Group;
 }
+/** A fighter that can switch between the shape-built body and a rigged model. */
+export interface Fighter3D extends FighterMesh {
+  /** Pass a factory to wear a rigged model, or null to go back to the shapes. */
+  setModel(make: ((pal: Palette) => FighterMesh) | null): void;
+}
 export type Venue = 'arena' | 'park' | 'court';
 export interface CagePanel { g: THREE.Group; normal: Vector3 }
 export interface Stage {
@@ -33,7 +38,7 @@ export interface Stage {
   readColors(): void;
   /** Run after the theme colors are read (light or dark), e.g. to recolor the park. */
   onColors(fn: () => void): void;
-  makeFighter(pal: Palette): FighterMesh;
+  makeFighter(pal: Palette): Fighter3D;
   toon(color: string): THREE.MeshToonMaterial;
   ink: THREE.MeshBasicMaterial;
   setVenue(v: Venue): void;
@@ -131,7 +136,29 @@ export function createStage(canvas: HTMLCanvasElement): Stage {
   type J = Required<Joints>;
   type Piece = (j: J, st: RigState) => void;
 
-  function makeFighter(pal: Palette): FighterMesh {
+  function makeFighter(pal: Palette): Fighter3D {
+    const outer = new THREE.Group();
+    scene.add(outer);
+    const shapes = makeShapes(pal);
+    outer.add(shapes.root);
+    let body: FighterMesh = shapes, palette = pal, last: RigState | null = null;
+    return {
+      root: outer,
+      update(st) { last = st; body.update(st); },
+      setPalette(p) { palette = p; body.setPalette(p); },
+      setModel(make) {
+        if (body !== shapes) outer.remove(body.root);
+        body = make ? make(palette) : shapes;
+        shapes.root.visible = !make;
+        if (make) outer.add(body.root);
+        body.setPalette(palette);
+        if (last) body.update(last);
+      }
+    };
+  }
+
+  /** The fighter built from simple shapes: spheres, capsules and ellipsoids with ink outlines. */
+  function makeShapes(pal: Palette): FighterMesh {
     const skin = toon(pal.skin);
     const m = {
       skin, shorts: toon(pal.shorts), trim: toon(pal.trim), glove: toon(pal.glove), cuff: toon(pal.cuff), hair: toon(pal.hair),
@@ -141,7 +168,6 @@ export function createStage(canvas: HTMLCanvasElement): Stage {
     };
     const pieces: Piece[] = [];
     const root = new THREE.Group();
-    scene.add(root);
     const mesh = (geo: THREE.BufferGeometry, mat: THREE.Material, outlineGeo: THREE.BufferGeometry | null): [THREE.Mesh, THREE.Mesh | null] => {
       const a = new THREE.Mesh(geo, mat); root.add(a);
       let o: THREE.Mesh | null = null;

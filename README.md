@@ -76,6 +76,8 @@ Most tuning is data, not code:
 
 [`docs/MODEL_SPEC.md`](docs/MODEL_SPEC.md) is the brief for a 3D artist making the real fighter models: skeleton and joint positions, the poses the model must survive (with reference renders), materials the game recolors, shape keys, export settings and acceptance checks.
 
+`public/models/fighter_test.glb` is a plain reference model built to that spec by [`art/model-test/build_fighter.py`](art/model-test/build_fighter.py) (run it in Blender 5, then export glTF). `src/rig/model.ts` drives any spec model from the engine's poses, and `tests/model.test.ts` checks that its joints land on the engine's in every pose. Choose **Fighter look → Test model (beta)** on the main menu to play with it.
+
 ## Prototypes
 
 `art/` holds the earlier single-page prototypes, kept as reference. They are not part of the build.

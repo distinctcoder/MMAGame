@@ -20,13 +20,15 @@ export interface Profile {
   park: ParkState;
   /** Story mode career. */
   story: StoryState;
+  /** How fighters are drawn: the built-in shapes, or the rigged test model. */
+  look: 'shapes' | 'model';
 }
 
 const KEY = 'mma-game.profile.v1';
 const HISTORY = 8;
 
 export function defaultProfile(): Profile {
-  return { name: 'Red', style: 'muay_thai', opponentStyle: 'wrestling', level: 'normal', tells: true, record: { wins: 0, losses: 0, draws: 0 }, history: [], training: {}, sparBehavior: 'normal', park: defaultPark(), story: defaultStory() };
+  return { name: 'Red', style: 'muay_thai', opponentStyle: 'wrestling', level: 'normal', tells: true, record: { wins: 0, losses: 0, draws: 0 }, history: [], training: {}, sparBehavior: 'normal', park: defaultPark(), story: defaultStory(), look: 'shapes' };
 }
 
 /** Reads the saved profile. Storage can be missing or blocked (private windows, previews), so this never throws. */
@@ -36,7 +38,7 @@ export function loadProfile(): Profile {
     if (!raw) return defaultProfile();
     const saved = JSON.parse(raw) as Partial<Profile>;
     const base = defaultProfile();
-    return { ...base, ...saved, record: { ...base.record, ...saved.record }, history: Array.isArray(saved.history) ? saved.history : [], training: { ...saved.training }, park: normalizePark(saved.park), story: normalizeStory(saved.story) };
+    return { ...base, ...saved, record: { ...base.record, ...saved.record }, history: Array.isArray(saved.history) ? saved.history : [], training: { ...saved.training }, park: normalizePark(saved.park), story: normalizeStory(saved.story), look: saved.look === 'model' ? 'model' : 'shapes' };
   } catch {
     return defaultProfile();
   }

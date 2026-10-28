@@ -30,6 +30,8 @@ So the model needs the following:
 | Source files | `.blend` (or the source from whatever tool you use) with the rig, weights and shape keys. |
 | `turnaround.png` | Front, side and back views of each base fighter in the rest pose. |
 
+A working reference model is in the repo: [`public/models/fighter_test.glb`](../public/models/fighter_test.glb), built by the Blender script [`art/model-test/build_fighter.py`](../art/model-test/build_fighter.py). It has the right skeleton, material names and weights; it's just plain. To check your own file, put it at that path and run `npm test`. [`tests/model.test.ts`](../tests/model.test.ts) drives it through every standing, clinch, ground and submission pose and fails if any joint drifts more than half a centimeter. Then pick **Test model (beta)** under Fighter look on the main menu to see it in the game.
+
 Before the final delivery, please send **one rigged test fighter** early. We'll load it into the game and run it through every pose. That way skeleton or weight problems show up while they're still cheap to fix.
 
 ## Skeleton
@@ -71,9 +73,9 @@ Use these names, so the game can find them without a lookup table. Each bone's h
 |---|---|---|---|
 | `root` | — | ground origin | Position on the mat. Not weighted. |
 | `pelvis` | root | pelvis → abd | The hip frame (lean and turn of the hips). |
-| `spine` | pelvis | abd → spine_mid | Halfway between the hip and chest frames, which spreads the waist twist. |
+| `spine` | pelvis | abd → spine_mid | The chest frame. The engine turns the whole ribcage with the chest, so spread the waist twist in the weights between `pelvis` and `spine`. |
 | `chest` | spine | spine_mid → chest | The chest frame. |
-| `neck` | chest | chest → head | Halfway between the chest and head frames. |
+| `neck` | chest | chest → head | Aimed at the head joint, turned with the head. |
 | `head` | neck | head → top of head (178) | The head frame. |
 | `clavicle_l/r` | chest | chest → shoulder | Fixed to the chest. Keep weights light. |
 | `upperarm_l/r` | clavicle | shoulder → elbow | Aimed at the elbow from IK. |
