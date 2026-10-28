@@ -8,7 +8,12 @@ export type Sfx =
   | { k: 'block' | 'parry' | 'check' | 'whiff' | 'sprawl' | 'escape' | 'knockdown' | 'bell' | 'tap' | 'end' }
   | { k: 'slam'; heavy?: boolean }
   | { k: 'finish'; how: string }
-  | { k: 'timing'; q: number };
+  | { k: 'timing'; q: number }
+  // Calls for the referee and announcer; they make no synthesized sound.
+  | { k: 'round'; n: number; last: boolean }
+  | { k: 'ref'; line: 'break' | 'standup' }
+  | { k: 'ten' }
+  | { k: 'decision'; draw: boolean };
 
 export type UiSound = 'click' | 'cash' | 'level' | 'point' | 'combo' | 'miss';
 
@@ -126,6 +131,8 @@ export function playSfx(ac: Ctx, out: AudioNode, buf: AudioBuffer, e: Sfx, t = a
       if (e.q > 0.9) { tone(ac, out, t, { type: 'triangle', f: 880, peak: 0.2, decay: 0.08 }); tone(ac, out, t + 0.07, { type: 'triangle', f: 1320, peak: 0.22, decay: 0.12 }); }
       else if (e.q > 0.6) tone(ac, out, t, { type: 'triangle', f: 880, peak: 0.2, decay: 0.1 });
       else tone(ac, out, t, { type: 'square', f: 196, f2: 150, peak: 0.08, decay: 0.14 });
+      return 0;
+    case 'round': case 'ref': case 'ten': case 'decision':
       return 0;
   }
 }

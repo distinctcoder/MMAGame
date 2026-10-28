@@ -1,6 +1,7 @@
 // Boot: build the 3D stage, wire the fight to the HUD and input, run the menu and the frame loop.
 import './styles.css';
 import { Sound, type Ambience } from './audio/sound';
+import { VoiceDirector } from './audio/voice';
 import { makeNoise, playSfx, playUi, type Sfx, type UiSound } from './audio/synth';
 import { SD } from './data';
 import { Fight, type Color } from './fight/fight';
@@ -25,6 +26,8 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 let profile: Profile = loadProfile();
 const sound = new Sound(profile.audio);
 const sfxCounts: Record<string, number> = {};
+const voiceLog: string[] = [];
+const voices = new VoiceDirector(id => { voiceLog.push(id); sound.voice(id); });
 // Browsers only start audio after the player interacts.
 for (const ev of ['pointerdown', 'keydown'] as const) addEventListener(ev, () => sound.unlock(), { capture: true, passive: true });
 type Screen = 'menu' | 'fight' | 'training' | 'park' | 'pickup' | 'story' | 'bout';
@@ -71,8 +74,8 @@ const fight = new Fight(meshes, {
   key: name => input.key(name),
   changed: () => hud.refresh(),
   ended: onEnded,
-  event: e => { if (screen === 'training') training.onEvent(e); },
-  sfx: e => { sfxCounts[e.k] = (sfxCounts[e.k] || 0) + 1; sound.play(e); }
+  event: e => { if (screen === 'training') training.onEvent(e); voices.event(e, performance.now()); },
+  sfx: e => { sfxCounts[e.k] = (sfxCounts[e.k] || 0) + 1; sound.play(e); voices.cue(e, performance.now()); }
 });
 const FIGHTING: Screen[] = ['fight', 'training', 'pickup', 'bout'];
 input = new Input(fight, { active: () => FIGHTING.includes(screen), deviceChanged, restart });
@@ -116,6 +119,7 @@ function renderProfile() {
   $<HTMLSelectElement>('p-look').value = profile.look;
   $<HTMLInputElement>('p-volume').value = String(Math.round(profile.audio.volume * 100));
   $<HTMLInputElement>('p-mute').checked = profile.audio.muted;
+  $<HTMLInputElement>('p-voices').checked = profile.audio.voices;
   const toggle = $('sound-toggle');
   toggle.textContent = profile.audio.muted ? 'Sound off' : 'Sound on';
   toggle.setAttribute('aria-pressed', String(profile.audio.muted));
@@ -162,6 +166,7 @@ function setAudio(change: Partial<Profile['audio']>) {
 $('p-volume').addEventListener('input', e => setAudio({ volume: Number((e.target as HTMLInputElement).value) / 100, muted: false }));
 $('p-volume').addEventListener('change', () => sound.ui('point'));
 $('p-mute').addEventListener('change', e => setAudio({ muted: (e.target as HTMLInputElement).checked }));
+$('p-voices').addEventListener('change', e => setAudio({ voices: (e.target as HTMLInputElement).checked }));
 $('sound-toggle').addEventListener('click', () => setAudio({ muted: !profile.audio.muted }));
 addEventListener('keydown', e => {
   if (e.key.toLowerCase() !== 'm' || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -189,7 +194,11 @@ function onEnded(winner: Color | null, how: string) {
   saveProfile(profile);
   renderProfile();
   if (screen === 'pickup') park.endPickup(winner);
-  if (screen === 'bout') story.endBout(winner, how);
+  if (screen === 'bout') {
+    const titleWin = winner === 'red' && !!story.upcoming()?.title;
+    story.endBout(winner, how);
+    if (titleWin) sound.voice('ann_champ');
+  }
 }
 
 function deviceChanged(kind: Device, id?: string) {
@@ -204,17 +213,24 @@ function deviceChanged(kind: Device, id?: string) {
 
 // ---------- Screens ----------
 function restart() {
+  resetVoices();
   if (screen === 'training') training.start();
   else if (screen === 'pickup') { hud.clearLog(); hud.clearBanner(); fight.tells = profile.tells; if (!park.startPickup(fight, pickupId)) location.hash = '#park'; }
   else if (screen === 'bout') {
     // The result is already on the record; a finished bout goes back to camp rather than straight into the next one.
     if (fight.over && !$('bout-result').hidden) { location.hash = '#story'; return; }
     hud.clearLog(); hud.clearBanner(); fight.tells = profile.tells;
+    sound.voice('ann_intro');
     if (!story.startBout(fight)) { location.hash = '#story'; return; }
     const o = fight.blue;
     hud.banner(o.name, `${profile.name} vs ${o.name} \u00b7 ${$('screen-label').textContent}`, 1800);
   }
   else if (screen === 'fight') startFight();
+}
+/** A new fight: the corner forgets the last one. It only talks in real fights, not in drills. */
+function resetVoices() {
+  voices.reset(performance.now());
+  voices.corner = screen !== 'training';
 }
 function startFight() {
   hud.clearLog();
@@ -272,9 +288,9 @@ function route() {
     // Coming back from the gym or the court puts you outside its door.
     const from = prev === 'pickup' ? 'court' : prev === 'training' ? 'gym' : null;
     park.enter(from ? PLACES.find(p => p.id === from)!.x : undefined);
-  } else if (screen === 'training') training.start();
+  } else if (screen === 'training') { resetVoices(); training.start(); }
   else if (screen === 'pickup' || screen === 'bout') restart();
-  else startFight();
+  else { resetVoices(); startFight(); }
   window.scrollTo(0, 0);
 }
 addEventListener('hashchange', route);
@@ -287,6 +303,7 @@ function frame(real: number) {
   last = real;
   input.poll();
   sound.frame(rdt);
+  if (FIGHTING.includes(screen)) voices.frame({ mode: fight.mode, over: fight.over, bottom: fight.mode === 'ground' ? fight.bot?.color ?? null : null }, performance.now());
   if (screen === 'story') story.poll();
   if (screen === 'park') {
     park.frame(real, rdt);
@@ -322,7 +339,7 @@ window.__fight = () => ({
 window.__standPose = (red, blue, dist, strike) => fight.debugStandPose(red, blue, dist, strike);
 window.__pairPose = (name, top, ov, subU) => fight.debugPairPose(name, top, ov, subU);
 window.__clock = ms => { fight.clock = ms; };
-window.__sfx = () => ({ ...sfxCounts, state: sound.state, muted: String(profile.audio.muted) });
+window.__sfx = () => ({ ...sfxCounts, state: sound.state, muted: String(profile.audio.muted), voicesLoaded: sound.voicesLoaded, said: voiceLog.join(',') });
 // Render every sound offline and measure it: loudness, how long it rings, and how much of it is bass (below 250 Hz).
 window.__renderSfx = async () => {
   const cues: [string, Sfx | UiSound][] = [

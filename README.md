@@ -52,6 +52,8 @@ Every sound is synthesized in the browser with Web Audio, so there are no audio 
 - swings whoosh, takedowns slam, the bell rings each round, and taps sound on a submission
 - the crowd roars on big moments, the gym is quieter, and the park has a street hum
 
+Voices: a referee, a ring announcer and Coach Ruiz in your corner, recorded with Higgsfield (Seed Audio). `src/audio/voice.ts` lists the lines and decides who speaks: round calls, "Fight!", stoppages, the ten-second warning, decisions, and corner shouts that react to what happens to your fighter. Clips go in `public/voice/<name>.mp3`; missing clips are skipped, and the silent padding is trimmed on load. Turn voices off with the Voices box on the main menu.
+
 Set the volume or mute on the main menu, use the Sound button above the fight, or press M. Audio starts after your first click or key press, as browsers require. The fight logic only emits cues (`FightEvents.sfx`); `src/audio/synth.ts` is where to tune how they sound.
 
 ## The park

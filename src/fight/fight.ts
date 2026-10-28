@@ -99,7 +99,8 @@ export interface FightSetup {
 export type FightEvent =
   | { type: 'throw'; attacker: Color; key: string }
   | { type: 'strike'; attacker: Color; key: string; result: R.DefenseResult | 'whiff' }
-  | { type: 'takedown'; attacker: Color; outcome: 'stuffed' | 'sprawl' | Position };
+  | { type: 'takedown'; attacker: Color; outcome: 'stuffed' | 'sprawl' | Position }
+  | { type: 'shoot'; attacker: Color };
 
 class Abort extends Error {}
 
@@ -173,7 +174,7 @@ export class Fight {
     Object.assign(this.ref, { x: 195, z: -120, yaw: -90, shown: null });
     this.moveRef('ref_stand');
     this.ev.tell(null);
-    if (!this.config.noClock) this.ev.sfx?.({ k: 'bell' });
+    if (!this.config.noClock) { this.ev.sfx?.({ k: 'round', n: 1, last: this.rounds() === 1 }); this.ev.sfx?.({ k: 'bell' }); }
     if (!this.config.noClock) this.ev.log('Round 1', `${this.red.name} (${this.style(this.red).label}) vs ${this.blue.name} (${this.style(this.blue).label})`);
     this.ev.changed();
   }
@@ -260,7 +261,9 @@ export class Fight {
     if (this.sub) this.tickSub(real);
     if (!this.over && this.mode !== 'break') {
       if (!this.config.noClock) {
+        const before = this.clock;
         this.clock -= dt;
+        if (before > 10000 && this.clock <= 10000) this.ev.sfx?.({ k: 'ten' });
         if (this.clock <= 0) { this.clock = 0; this.endRound(); }
       }
       for (const f of [this.red, this.blue]) {
@@ -276,6 +279,7 @@ export class Fight {
         this.lastAction = this.now;
         this.act(async () => {
           this.ev.banner('Break', 'The referee breaks the clinch'); this.ev.log('Referee breaks the clinch');
+          this.ev.sfx?.({ k: 'ref', line: 'break' });
           this.moveRef('ref_stop'); await this.step(this.sleep(400)); await this.backToFeet(500);
         });
       }
@@ -285,6 +289,7 @@ export class Fight {
         this.lastAction = this.now;
         this.act(async () => {
           this.ev.banner('Stand up', 'The referee stands them up'); this.ev.log('Referee stands them up');
+          this.ev.sfx?.({ k: 'ref', line: 'standup' });
           this.moveRef('ref_stop'); await this.step(this.sleep(500)); await this.backToFeet(600);
         });
       }
@@ -499,6 +504,7 @@ export class Fight {
     if (this.mode !== 'stand' || att.action.type !== 'idle') return;
     const def = this.other(att);
     if (Math.abs(att.x - def.x) > 125) { if (this.isHuman(att)) this.ev.pop(att.bodyJoints.head, 'Too far', 'miss'); return; }
+    this.ev.event?.({ type: 'shoot', attacker: att.color });
     this.act(async () => {
       this.mode = 'grapple';
       att.sta = Math.max(0, att.sta - 10);
@@ -854,6 +860,7 @@ export class Fight {
     setTimeout(() => {
       if (this.over || g !== this.gen) return;
       this.round++; this.clock = this.roundMs();
+      this.ev.sfx?.({ k: 'round', n: this.round, last: this.round === this.rounds() });
       this.ev.sfx?.({ k: 'bell' });
       this.red.x = -70; this.blue.x = 70;
       for (const f of [this.red, this.blue]) {
@@ -872,6 +879,7 @@ export class Fight {
     const r = R.decision(this.scores);
     this.over = true;
     this.ev.sfx?.({ k: 'end' });
+    this.ev.sfx?.({ k: 'decision', draw: !r.winner });
     this.ev.tell(null);
     if (!r.winner) {
       this.ev.banner('Draw', `Judges: ${r.red}–${r.blue}`, 0);

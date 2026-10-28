@@ -23,14 +23,14 @@ export interface Profile {
   /** How fighters are drawn: the built-in shapes, or the rigged test model. */
   look: 'shapes' | 'model';
   /** Sound volume (0 to 1) and mute. */
-  audio: { volume: number; muted: boolean };
+  audio: { volume: number; muted: boolean; voices: boolean };
 }
 
 const KEY = 'mma-game.profile.v1';
 const HISTORY = 8;
 
 export function defaultProfile(): Profile {
-  return { name: 'Red', style: 'muay_thai', opponentStyle: 'wrestling', level: 'normal', tells: true, record: { wins: 0, losses: 0, draws: 0 }, history: [], training: {}, sparBehavior: 'normal', park: defaultPark(), story: defaultStory(), look: 'shapes', audio: { volume: 0.7, muted: false } };
+  return { name: 'Red', style: 'muay_thai', opponentStyle: 'wrestling', level: 'normal', tells: true, record: { wins: 0, losses: 0, draws: 0 }, history: [], training: {}, sparBehavior: 'normal', park: defaultPark(), story: defaultStory(), look: 'shapes', audio: { volume: 0.7, muted: false, voices: true } };
 }
 
 /** Reads the saved profile. Storage can be missing or blocked (private windows, previews), so this never throws. */
@@ -41,7 +41,7 @@ export function loadProfile(): Profile {
     const saved = JSON.parse(raw) as Partial<Profile>;
     const base = defaultProfile();
     return { ...base, ...saved, record: { ...base.record, ...saved.record }, history: Array.isArray(saved.history) ? saved.history : [], training: { ...saved.training }, park: normalizePark(saved.park), story: normalizeStory(saved.story), look: saved.look === 'model' ? 'model' : 'shapes',
-      audio: { volume: Number.isFinite(saved.audio?.volume) ? Math.max(0, Math.min(1, saved.audio!.volume)) : 0.7, muted: !!saved.audio?.muted } };
+      audio: { volume: Number.isFinite(saved.audio?.volume) ? Math.max(0, Math.min(1, saved.audio!.volume)) : 0.7, muted: !!saved.audio?.muted, voices: saved.audio?.voices !== false } };
   } catch {
     return defaultProfile();
   }

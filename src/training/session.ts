@@ -41,6 +41,7 @@ export function handleEvent(s: Session, e: FightEvent, now: number): Award | nul
   const d = s.drill;
   if (e.type === 'throw') { if (e.attacker === 'red') s.thrown++; return null; }
   if (e.type === 'takedown') return e.attacker === 'blue' && d.kind === 'takedown' ? award(s, e.outcome) : null;
+  if (e.type === 'shoot') return null;
   if (e.attacker === 'red') {
     if (LANDED.has(e.result)) s.landed++;
     return d.kind === 'combo' ? comboStep(s, e.key, e.result, now) : null;
