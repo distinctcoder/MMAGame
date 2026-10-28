@@ -1,5 +1,7 @@
 // Boot: build the 3D stage, wire the fight to the HUD and input, run the menu and the frame loop.
 import './styles.css';
+import { Sound, type Ambience } from './audio/sound';
+import { makeNoise, playSfx, playUi, type Sfx, type UiSound } from './audio/synth';
 import { SD } from './data';
 import { Fight, type Color } from './fight/fight';
 import type { Level } from './fight/rules';
@@ -21,6 +23,10 @@ import { Hud } from './ui/hud';
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
 let profile: Profile = loadProfile();
+const sound = new Sound(profile.audio);
+const sfxCounts: Record<string, number> = {};
+// Browsers only start audio after the player interacts.
+for (const ev of ['pointerdown', 'keydown'] as const) addEventListener(ev, () => sound.unlock(), { capture: true, passive: true });
 type Screen = 'menu' | 'fight' | 'training' | 'park' | 'pickup' | 'story' | 'bout';
 let screen: Screen = 'menu';
 /** The park fighter for the current or next pickup fight. */
@@ -65,7 +71,8 @@ const fight = new Fight(meshes, {
   key: name => input.key(name),
   changed: () => hud.refresh(),
   ended: onEnded,
-  event: e => { if (screen === 'training') training.onEvent(e); }
+  event: e => { if (screen === 'training') training.onEvent(e); },
+  sfx: e => { sfxCounts[e.k] = (sfxCounts[e.k] || 0) + 1; sound.play(e); }
 });
 const FIGHTING: Screen[] = ['fight', 'training', 'pickup', 'bout'];
 input = new Input(fight, { active: () => FIGHTING.includes(screen), deviceChanged, restart });
@@ -73,10 +80,12 @@ hud = new Hud(fight, input, stage.camera);
 const camera = new GameCamera(stage.camera, stage.panels);
 const store = { get: () => profile, set: (p: Profile) => { profile = p; saveProfile(p); renderProfile(); } };
 training = new TrainingController(fight, input, hud, store);
+training.ui = (k, step) => sound.ui(k, step);
 const makeNpc = () => { const f = stage.makeFighter(PALETTES.blue); wearers.push(f); applyLook(f); return f; };
 const park = new ParkController(stage, buildPark(stage), meshes.red, meshes.blue, meshes.ref, makeNpc, camera, {
   ...store,
   device: () => input.device,
+  ui: k => sound.ui(k),
   startDrill(id) { training.drillId = id; training.returnTo = 'park'; location.hash = '#training'; },
   startPickup(id) {
     pickupId = id;
@@ -86,7 +95,8 @@ const park = new ParkController(stage, buildPark(stage), meshes.red, meshes.blue
 const story = new StoryController(meshes.blue, {
   ...store,
   startDrill(id) { training.drillId = id; training.returnTo = 'story'; location.hash = '#training'; },
-  startBout() { location.hash = '#bout'; }
+  startBout() { location.hash = '#bout'; },
+  ui: k => sound.ui(k)
 });
 // A drill run from a story camp uses a camp session.
 training.onDrillEnd = id => { if (training.returnTo === 'story') story.drillDone(id); };
@@ -104,6 +114,11 @@ function renderProfile() {
   fillStyles($('style-blue'), profile.opponentStyle);
   $<HTMLSelectElement>('p-level').value = profile.level;
   $<HTMLSelectElement>('p-look').value = profile.look;
+  $<HTMLInputElement>('p-volume').value = String(Math.round(profile.audio.volume * 100));
+  $<HTMLInputElement>('p-mute').checked = profile.audio.muted;
+  const toggle = $('sound-toggle');
+  toggle.textContent = profile.audio.muted ? 'Sound off' : 'Sound on';
+  toggle.setAttribute('aria-pressed', String(profile.audio.muted));
   $<HTMLSelectElement>('level').value = profile.level;
   $<HTMLInputElement>('tells').checked = profile.tells;
   const r = profile.record;
@@ -139,6 +154,21 @@ for (const [id, key] of [['p-style', 'style'], ['style-red', 'style'], ['p-opp',
     if (screen !== 'menu') restart();
   });
 }
+// ---------- Sound settings ----------
+function setAudio(change: Partial<Profile['audio']>) {
+  update({ audio: { ...profile.audio, ...change } });
+  sound.set(profile.audio);
+}
+$('p-volume').addEventListener('input', e => setAudio({ volume: Number((e.target as HTMLInputElement).value) / 100, muted: false }));
+$('p-volume').addEventListener('change', () => sound.ui('point'));
+$('p-mute').addEventListener('change', e => setAudio({ muted: (e.target as HTMLInputElement).checked }));
+$('sound-toggle').addEventListener('click', () => setAudio({ muted: !profile.audio.muted }));
+addEventListener('keydown', e => {
+  if (e.key.toLowerCase() !== 'm' || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+  if ((e.target as HTMLElement | null)?.closest('input, select, textarea')) return;
+  setAudio({ muted: !profile.audio.muted });
+});
+
 $('p-look').addEventListener('change', e => {
   update({ look: (e.target as HTMLSelectElement).value === 'model' ? 'model' : 'shapes' });
   $('look-note').textContent = '';
@@ -226,6 +256,8 @@ function route() {
   $<HTMLAnchorElement>('back').href = backTo ? '#' + backTo : '#';
   $('back').innerHTML = backTo === 'park' ? '&larr; Park' : backTo === 'story' ? '&larr; Camp' : '&larr; Menu';
   screen = next;
+  const AMBIENCE: Record<Screen, Ambience> = { menu: null, story: null, fight: 'arena', pickup: 'arena', bout: 'arena', training: 'gym', park: 'street' };
+  sound.setAmbience(AMBIENCE[next]);
   if (prev === 'park') { park.leave(); camera.snap(V(70, 128, 820), V(0, 102, 0), 17.5); }
   if (prev === 'pickup') park.endPickupScreen();
   if (prev === 'bout') story.endBoutScreen();
@@ -254,6 +286,7 @@ function frame(real: number) {
   const rdt = Math.min(50, real - last);
   last = real;
   input.poll();
+  sound.frame(rdt);
   if (screen === 'story') story.poll();
   if (screen === 'park') {
     park.frame(real, rdt);
@@ -276,6 +309,8 @@ declare global {
     __standPose?: (red: string, blue: string, dist: number, strike?: string) => void;
     __pairPose?: (name: string, top: Color, ov?: Record<string, string>, subU?: number) => void;
     __clock?: (ms: number) => void;
+    __sfx?: () => Record<string, number | string>;
+    __renderSfx?: () => Promise<Record<string, { peak: number; rms: number; ms: number; low: number }>>;
   }
 }
 window.__fight = () => ({
@@ -287,6 +322,34 @@ window.__fight = () => ({
 window.__standPose = (red, blue, dist, strike) => fight.debugStandPose(red, blue, dist, strike);
 window.__pairPose = (name, top, ov, subU) => fight.debugPairPose(name, top, ov, subU);
 window.__clock = ms => { fight.clock = ms; };
+window.__sfx = () => ({ ...sfxCounts, state: sound.state, muted: String(profile.audio.muted) });
+// Render every sound offline and measure it: loudness, how long it rings, and how much of it is bass (below 250 Hz).
+window.__renderSfx = async () => {
+  const cues: [string, Sfx | UiSound][] = [
+    ['swing punch', { k: 'swing', kick: false }], ['swing kick', { k: 'swing', kick: true }], ['whiff', { k: 'whiff' }],
+    ['hit head', { k: 'hit', part: 'head', dmg: 10 }], ['hit body', { k: 'hit', part: 'body', dmg: 10 }], ['hit legs', { k: 'hit', part: 'legs', dmg: 10 }],
+    ['hit head weak', { k: 'hit', part: 'head', dmg: 3 }], ['block', { k: 'block' }], ['parry', { k: 'parry' }], ['check', { k: 'check' }],
+    ['slam', { k: 'slam', heavy: true }], ['knockdown', { k: 'knockdown' }], ['sprawl', { k: 'sprawl' }], ['escape', { k: 'escape' }],
+    ['tap', { k: 'tap' }], ['bell', { k: 'bell' }], ['end', { k: 'end' }], ['finish', { k: 'finish', how: 'KO' }],
+    ['timing perfect', { k: 'timing', q: 1 }], ['timing miss', { k: 'timing', q: 0 }],
+    ['ui point', 'point'], ['ui combo', 'combo'], ['ui cash', 'cash'], ['ui level', 'level'], ['ui click', 'click'], ['ui miss', 'miss']
+  ];
+  const out: Record<string, { peak: number; rms: number; ms: number; low: number }> = {};
+  for (const [name, cue] of cues) {
+    const render = async (lowpass: boolean) => {
+      const ac = new OfflineAudioContext(1, 44100 * 3, 44100);
+      let dest: AudioNode = ac.destination;
+      if (lowpass) { const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 250; f.connect(ac.destination); dest = f; }
+      if (typeof cue === 'string') playUi(ac, dest, cue, 0, 0); else playSfx(ac, dest, makeNoise(ac), cue, 0);
+      return (await ac.startRendering()).getChannelData(0);
+    };
+    const d = await render(false), lo = await render(true);
+    let peak = 0, sum = 0, sumLo = 0, last = 0;
+    for (let i = 0; i < d.length; i++) { const a = Math.abs(d[i]); if (a > peak) peak = a; sum += d[i] * d[i]; sumLo += lo[i] * lo[i]; if (a > 0.01) last = i; }
+    out[name] = { peak: +peak.toFixed(3), rms: +Math.sqrt(sum / d.length).toFixed(4), ms: Math.round(last / 44.1), low: +(sumLo / (sum || 1)).toFixed(2) };
+  }
+  return out;
+};
 
 // ---------- Boot ----------
 stage.readColors();

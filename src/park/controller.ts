@@ -2,6 +2,7 @@
 import { SD } from '../data';
 import type { Color, Fight } from '../fight/fight';
 import { STATS, type Stat } from '../fight/rules';
+import type { UiSound } from '../audio/synth';
 import type { Device } from '../input/input';
 import { V } from '../rig/math';
 import { resolveStand, standSpec } from '../rig/poses';
@@ -33,6 +34,7 @@ export interface ParkHooks {
   startDrill(id: DrillId): void;
   startPickup(id: string): void;
   device(): Device;
+  ui?(kind: UiSound): void;
 }
 
 interface Npc { mesh: FighterMesh; spot: { x: number; z: number }; fighter: ParkFighter | null; yaw: number; t0: number }
@@ -307,17 +309,17 @@ export class ParkController {
       const c = CLASSES.find(k => k.id === id)!;
       const r = takeClass(p, c);
       if (!r.ok) this.message = r.why === 'cash' ? `You need ${money(classPrice(p, c))} for ${c.name}.` : `You've learned all ${c.name} can teach.`;
-      else { this.setPark(r.park); this.message = `${c.name}: ${gainText(r.gains)}`; }
+      else { this.setPark(r.park); this.message = `${c.name}: ${gainText(r.gains)}`; this.hooks.ui?.(r.gains.some(g => g.to > g.from) ? 'level' : 'click'); }
     }
     if (act === 'buy') {
       const g = GEAR.find(k => k.id === id)!;
       const r = buyGear(p, id);
       if (!r.ok) this.message = r.why === 'cash' ? `${g.name} costs ${money(g.price)}.` : r.why === 'rep' ? `The shop keeps ${g.name} for regulars (${g.rep} rep).` : '';
-      else { this.setPark(r.park); this.message = `Bought and put on: ${g.name}.`; }
+      else { this.setPark(r.park); this.message = `Bought and put on: ${g.name}.`; this.hooks.ui?.('cash'); }
     }
     if (act === 'equip') {
       const r = equip(p, id);
-      if (r.ok) { this.setPark(r.park); this.message = `Wearing ${GEAR.find(k => k.id === id)!.name}.`; }
+      if (r.ok) { this.setPark(r.park); this.message = `Wearing ${GEAR.find(k => k.id === id)!.name}.`; this.hooks.ui?.('click'); }
     }
     this.render();
   }
@@ -419,6 +421,7 @@ export class ParkController {
     const result = winner === 'red' ? 'win' : winner ? 'loss' : 'draw';
     const { park, pay } = applyFight(this.park, f, result);
     this.setPark(park);
+    setTimeout(() => this.hooks.ui?.('cash'), 900);
     $('pr-title').textContent = result === 'win' ? (pay.king ? 'King of the Court' : 'You won') : result === 'loss' ? 'You lost' : 'Draw';
     $('pr-cash').textContent = '+' + money(pay.cash);
     $('pr-rep').textContent = `+${pay.rep} rep`;

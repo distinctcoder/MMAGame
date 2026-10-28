@@ -4,6 +4,7 @@ import type { Color, Fight } from '../fight/fight';
 import { withBoost, type Stat } from '../fight/rules';
 import { CLASSES, DRILL_TRAINS, STAT_LABEL } from '../park/data';
 import { addXp, boosts } from '../park/progress';
+import type { UiSound } from '../audio/synth';
 import type { Profile } from '../profile/profile';
 import { PALETTES, type FighterMesh } from '../rig/stage';
 import { DRILLS, type DrillId } from '../training/drills';
@@ -20,6 +21,7 @@ export interface StoryHooks {
   set(p: Profile): void;
   startDrill(id: DrillId): void;
   startBout(): void;
+  ui?(kind: UiSound): void;
 }
 
 /** Tale of the tape: groups of stats, averaged. */
@@ -71,6 +73,7 @@ export class StoryController {
         // Camp classes are on the house.
         const { park, gains } = addXp(this.hooks.get().park, c.stats, c.xp);
         this.save(next, park);
+        this.hooks.ui?.(gains.some(g => g.to > g.from) ? 'level' : 'click');
         this.message = `${c.name}: ` + (gains.map(g => `+${g.xp} ${STAT_LABEL[g.stat]} XP${g.to > g.from ? ` (level ${g.to})` : ''}`).join(', ') || 'already maxed');
       }
     }
@@ -193,6 +196,7 @@ export class StoryController {
     const r = applyBout(prof.story, prof.park, result, how);
     if (!r) return;
     this.save(r.story, r.park);
+    setTimeout(() => this.hooks.ui?.('cash'), 900);
     $('br-title').textContent = result === 'win' ? (b.title ? 'Champion' : 'You won') : result === 'loss' ? 'You lost' : 'Draw';
     $('br-pay').textContent = `+${money(r.pay.cash)}${r.pay.rep ? ` · +${r.pay.rep} park rep` : ''}`;
     $('br-detail').textContent = result === 'win'

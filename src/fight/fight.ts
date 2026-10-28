@@ -6,6 +6,7 @@ import { blendState, bodyJoints, clamp, cloneJoints, ease, qEuler, V, add, type 
 import { PairPoses, resolveStand, standSpec, toWorld, type Opponent } from '../rig/poses';
 import type { FighterMesh } from '../rig/stage';
 import * as R from './rules';
+import type { Sfx } from '../audio/synth';
 import { cpuClinch, cpuDefend, cpuGround, cpuSeesWindup, cpuStand } from './cpu';
 
 export type Color = 'red' | 'blue';
@@ -63,6 +64,8 @@ export interface FightEvents {
   ended(winner: Color | null, how: string): void;
   /** Optional structured events, used by training drills. */
   event?(e: FightEvent): void;
+  /** Optional sound cues. */
+  sfx?(e: Sfx): void;
 }
 
 /** Steers the CPU for training. Anything left out keeps normal fight behavior. */
@@ -170,6 +173,7 @@ export class Fight {
     Object.assign(this.ref, { x: 195, z: -120, yaw: -90, shown: null });
     this.moveRef('ref_stand');
     this.ev.tell(null);
+    if (!this.config.noClock) this.ev.sfx?.({ k: 'bell' });
     if (!this.config.noClock) this.ev.log('Round 1', `${this.red.name} (${this.style(this.red).label}) vs ${this.blue.name} (${this.style(this.blue).label})`);
     this.ev.changed();
   }
@@ -344,7 +348,7 @@ export class Fight {
     const a = att.action as StrikeAction, s = a.s, def = this.other(att);
     const at = def.bodyJoints[s.part === 'legs' ? 'lhip' : s.part === 'body' ? 'chest' : 'head']!;
     if (!R.inRange(s, Math.abs(att.x - def.x))) {
-      this.ev.pop(at, 'Whiff', 'miss'); a.recoverMul = 1.6;
+      this.ev.pop(at, 'Whiff', 'miss'); a.recoverMul = 1.6; this.ev.sfx?.({ k: 'whiff' });
       this.ev.event?.({ type: 'strike', attacker: att.color, key: a.key, result: 'whiff' });
       return;
     }
@@ -354,6 +358,7 @@ export class Fight {
     this.ev.event?.({ type: 'strike', attacker: att.color, key: a.key, result: out.result });
     if (out.result === 'dodged') {
       this.ev.pop(at, R.EVADED[(da as { kind: EvadeKind }).kind] + '! Counter', 'gold');
+      this.ev.sfx?.({ k: 'whiff' });
       a.recoverMul = 1.6;
       def.counterUntil = this.now + R.COUNTER_WINDOW_MS; def.counterMul = out.counterMul!;
       this.ev.rumble(0.15, 60);
@@ -366,6 +371,8 @@ export class Fight {
     else if (out.result === 'blocked') tag = ['Blocked', 'block'];
     else if (out.result === 'partial') tag = ['Partly blocked', 'block'];
     const dmg = R.strikeDamage(s, this.style(att), out.mult, a, this.rng());
+    this.ev.sfx?.(out.result === 'checked' ? { k: 'check' } : out.result === 'parried' ? { k: 'parry' }
+      : out.mult >= 0.5 && dmg >= 1 ? { k: 'hit', part: s.part, dmg } : { k: 'block' });
     if (dmg >= 1) {
       this.hurt(def, s.part, dmg, att);
       if (out.mult >= 0.5) {
@@ -392,7 +399,7 @@ export class Fight {
       if (u >= 1) f.moveDur = 0;
     }
     if (a.type === 'strike') {
-      if (a.phase === 'wind' && this.now >= a.tHit - 70) { a.phase = 'extend'; this.stand(f, a.s.hit, 70); }
+      if (a.phase === 'wind' && this.now >= a.tHit - 70) { a.phase = 'extend'; this.stand(f, a.s.hit, 70); this.ev.sfx?.({ k: 'swing', kick: !!a.s.kick }); }
       if (a.phase === 'extend' && this.now >= a.tHit) {
         a.phase = 'hold'; a.recoverMul = 1;
         if (!this.isHuman(f)) this.ev.tell(null);
@@ -449,6 +456,7 @@ export class Fight {
     if (!t) return;
     this.timing = null;
     this.ev.banner(q > 0.9 ? 'Perfect' : q > 0.6 ? 'Good' : q > 0 ? 'Off' : 'Missed', null, 600);
+    this.ev.sfx?.({ k: 'timing', q });
     t.resolve(q);
     this.ev.changed();
   }
@@ -502,7 +510,7 @@ export class Fight {
       if (r1.margin < R.LEVEL_CHANGE_STUFF) {
         this.ev.event?.({ type: 'takedown', attacker: att.color, outcome: 'stuffed' });
         this.ev.log(def.name + ' reads it and stuffs the shot', r1.detail);
-        this.ev.banner('Stuffed', def.name + ' read the level change');
+        this.ev.banner('Stuffed', def.name + ' read the level change'); this.ev.sfx?.({ k: 'sprawl' });
         await this.step(this.pair('stuffed', 300));
         await this.step(this.sleep(450));
         return this.backToFeet(500);
@@ -513,7 +521,7 @@ export class Fight {
       this.ev.event?.({ type: 'takedown', attacker: att.color, outcome: land });
       if (land === 'sprawl') {
         this.ev.log(def.name + ' sprawls and stuffs the takedown', r2.detail);
-        this.ev.banner('Sprawl', 'Takedown stuffed');
+        this.ev.banner('Sprawl', 'Takedown stuffed'); this.ev.sfx?.({ k: 'sprawl' });
         await this.step(this.pair('sprawl', 380));
         await this.step(this.sleep(700));
         return this.backToFeet(600);
@@ -521,7 +529,7 @@ export class Fight {
       await this.step(this.pair('drive', 240));
       this.enterGround(land, 300);
       await this.step(this.sleep(300));
-      this.shake = 9; this.ev.rumble(0.8, 200);
+      this.shake = 9; this.ev.rumble(0.8, 200); this.ev.sfx?.({ k: 'slam', heavy: land !== 'guard' });
       this.hurt(def, 'body', 4, att);
       if (land === 'guard') { this.ev.log(def.name + ' scrambles and lands in guard', r2.detail); this.ev.banner('Takedown', def.name + ' lands in closed guard'); }
       else { this.ev.log(`${att.name} takes it down to ${this.label(land)}`, r2.detail); this.ev.banner('Takedown', `${att.name} lands in ${this.label(land)}`); }
@@ -547,7 +555,7 @@ export class Fight {
   private knockdown(att: Fighter, def: Fighter) {
     this.act(async () => {
       this.mode = 'grapple';
-      this.ev.banner('Knockdown', def.name + ' is down');
+      this.ev.banner('Knockdown', def.name + ' is down'); this.ev.sfx?.({ k: 'knockdown' });
       this.ev.log(att.name + ' drops ' + def.name);
       def.action = { type: 'grapple' };
       this.stand(def, 'ko', 500);
@@ -571,9 +579,10 @@ export class Fight {
       const blocked = cpuDef ? cpuBlocks : performance.now() - this.blockAt < 520;
       await this.step(this.roleAnim(att, 'top_punch', 100));
       const at = def.bodyJoints.head;
-      if (blocked) { this.ev.pop(at, 'Blocked', 'block'); this.hurt(def, 'head', 1, att); }
+      if (blocked) { this.ev.pop(at, 'Blocked', 'block'); this.ev.sfx?.({ k: 'block' }); this.hurt(def, 'head', 1, att); }
       else {
         const dmg = R.gnpDamage(this.style(att), this.pos!, this.rng());
+        this.ev.sfx?.({ k: 'hit', part: 'head', dmg });
         this.ev.pop(at, String(Math.round(dmg)), 'hit');
         this.shake = 5; this.ev.rumble(this.isHuman(def) ? 0.9 : 0.3, 140);
         void this.roleAnim(def, 'bot_hit', 90);
@@ -656,7 +665,7 @@ export class Fight {
       this.camOverride = null;
       if (result === 'tap') return this.finish(att, def, 'Tap out', sub.label);
       this.ev.log(`${def.name} escapes the ${sub.label.toLowerCase()}`, `Attack ${attStat} vs defense ${defStat}`);
-      this.ev.banner('Escaped', sub.label);
+      this.ev.banner('Escaped', sub.label); this.ev.sfx?.({ k: 'escape' });
       this.lastAction = this.now;
       await this.step(this.pair(this.pos!, 500));
     });
@@ -718,9 +727,10 @@ export class Fight {
       att.sta = Math.max(0, att.sta - (kind === 'knee' ? 6 : 5));
       await this.step(this.roleAnim(att, kind, 100));
       const at = def.bodyJoints[kind === 'knee' ? 'abd' : 'head'];
-      if (blocked) { this.ev.pop(at, 'Blocked', 'block'); this.hurt(def, zone === 'body' ? 'body' : 'head', 1, att); }
+      if (blocked) { this.ev.pop(at, 'Blocked', 'block'); this.ev.sfx?.({ k: 'block' }); this.hurt(def, zone === 'body' ? 'body' : 'head', 1, att); }
       else {
         const dmg = R.clinchDamage(kind, this.style(att), ctrl, this.rng());
+        this.ev.sfx?.({ k: 'hit', part: kind === 'knee' ? 'body' : 'head', dmg });
         this.ev.pop(at, String(Math.round(dmg)), 'hit');
         this.shake = Math.min(9, dmg * 0.6); this.ev.rumble(this.isHuman(def) ? 0.9 : 0.3, 160);
         void this.roleAnim(def, kind === 'knee' ? 'hitbody' : 'hithead', 90);
@@ -764,7 +774,7 @@ export class Fight {
         const land = R.tripLanding(r.margin);
         this.enterGround(land, 300);
         await this.step(this.sleep(300));
-        this.shake = 8; this.ev.rumble(0.8, 200);
+        this.shake = 8; this.ev.rumble(0.8, 200); this.ev.sfx?.({ k: 'slam' });
         this.hurt(def, 'body', 4, att);
         this.ev.log(`${att.name} trips ${def.name} into ${this.label(land)}`, r.detail);
         this.ev.banner('Trip', `${att.name} lands in ${this.label(land)}`);
@@ -824,6 +834,8 @@ export class Fight {
     }
     this.moveRef('ref_stop');
     this.ev.banner(how, `${winner.name} wins by ${detail.toLowerCase()}`, 0);
+    this.ev.sfx?.(how === 'Tap out' ? { k: 'tap' } : { k: 'finish', how });
+    if (how === 'Tap out') this.ev.sfx?.({ k: 'finish', how });
     this.ev.log(`${winner.name} wins by ${how.toLowerCase()}`, `${detail}, round ${this.round}`);
     this.ev.ended(winner.color, how);
     this.ev.changed();
@@ -833,6 +845,7 @@ export class Fight {
     this.scores.push(card);
     this.ev.log(`End of round ${this.round}: judges score it ${card[0]}-${card[1]}`, `Damage this round: ${this.red.name} ${Math.round(this.red.roundDealt)}, ${this.blue.name} ${Math.round(this.blue.roundDealt)}`);
     if (this.round >= this.rounds()) return this.decision();
+    this.ev.sfx?.({ k: 'bell' });
     this.gen++;
     this.busy = false; this.timing = null; this.sub = null; this.camOverride = null;
     this.mode = 'break';
@@ -841,6 +854,7 @@ export class Fight {
     setTimeout(() => {
       if (this.over || g !== this.gen) return;
       this.round++; this.clock = this.roundMs();
+      this.ev.sfx?.({ k: 'bell' });
       this.red.x = -70; this.blue.x = 70;
       for (const f of [this.red, this.blue]) {
         f.moveDur = 0; f.roundDealt = 0; f.sta = R.maxStamina(f.body);
@@ -857,6 +871,7 @@ export class Fight {
   private decision() {
     const r = R.decision(this.scores);
     this.over = true;
+    this.ev.sfx?.({ k: 'end' });
     this.ev.tell(null);
     if (!r.winner) {
       this.ev.banner('Draw', `Judges: ${r.red}–${r.blue}`, 0);

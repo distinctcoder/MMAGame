@@ -176,6 +176,11 @@
   .topbar { display: flex; gap: 16px; align-items: center; justify-content: space-between; }
   .back { font-weight: 600; text-decoration: none; padding: 8px 12px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); }
   .back:hover { border-color: var(--muted); }
+  .topbar .eyebrow { margin-left: auto; }
+  .sound-toggle { padding: 8px 10px; font-size: 13px; }
+  .sound-toggle[aria-pressed="true"] { color: var(--muted); }
+  .sound-row { display: flex; gap: 12px; align-items: center; }
+  input[type="range"] { width: 140px; padding: 0; border: 0; background: none; accent-color: var(--red); }
 
   /* ----- Training ----- */
   .training { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px 24px; align-items: start; }

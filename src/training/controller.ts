@@ -5,6 +5,7 @@ import type { Input } from '../input/input';
 import { DRILL_TRAINS, drillXp, STAT_LABEL } from '../park/data';
 import { addXp } from '../park/progress';
 import { recordDrill, type Profile } from '../profile/profile';
+import type { UiSound } from '../audio/synth';
 import type { Hud } from '../ui/hud';
 import { DRILLS, SPAR_BEHAVIORS, type DrillId } from './drills';
 import { currentCombo, handleEvent, newSession, OUTCOME_LABEL, tick, timeLeft, type Award, type Session } from './session';
@@ -17,6 +18,8 @@ export class TrainingController {
   drillId: DrillId = 'spar';
   /** Set when the drill was started from the park gym or a story fight camp; shows a way back. */
   returnTo: 'park' | 'story' | null = null;
+  /** Plays score sounds; set by the app. */
+  ui?: (kind: UiSound, step?: number) => void;
   /** Called when a scored drill finishes. */
   onDrillEnd?: (id: DrillId, score: number) => void;
   private session: Session | null = null;
@@ -113,6 +116,9 @@ export class TrainingController {
   }
 
   private flash(a: Award) {
+    const s = this.session;
+    if (a.good) this.ui?.(s?.drill.kind === 'combo' && a.points >= 100 ? 'combo' : 'point', s?.streak ?? 0);
+    else this.ui?.('miss');
     const el = $('dh-last');
     el.textContent = (a.points ? `+${a.points} ` : '') + a.label;
     el.className = 'dh-last ' + (a.good ? 'good' : 'bad');
@@ -149,6 +155,7 @@ export class TrainingController {
     this.store.set(profile);
     $('r-xp').textContent = gains.map(g => `+${g.xp} ${STAT_LABEL[g.stat]} XP${g.to > g.from ? ` (level ${g.to})` : ''}`).join(' · ');
     $('r-xp').hidden = !gains.length;
+    if (gains.some(g => g.to > g.from)) this.ui?.('level');
     $('r-score').textContent = String(s.score);
     const bestEl = $('r-best');
     bestEl.textContent = best ? (prev === undefined ? 'First score saved' : `New best! Old best ${prev}`) : `Your best: ${profile.training[d.id]}`;

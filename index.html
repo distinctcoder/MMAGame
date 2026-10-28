@@ -51,6 +51,8 @@
         <div class="field"><label class="label" for="p-opp">Opponent style</label><select id="p-opp"></select></div>
         <div class="field"><label class="label" for="p-level">CPU level</label>
           <select id="p-level"><option value="easy">Easy</option><option value="normal">Normal</option><option value="hard">Hard</option></select></div>
+        <div class="field"><label class="label" for="p-volume">Sound</label>
+          <div class="sound-row"><input type="range" id="p-volume" min="0" max="100" step="5" aria-label="Volume"><label class="check" for="p-mute"><input type="checkbox" id="p-mute"> Mute</label></div></div>
         <div class="field"><label class="label" for="p-look">Fighter look</label>
           <select id="p-look"><option value="shapes">Classic shapes</option><option value="model">Test model (beta)</option></select></div>
       </div>
@@ -73,6 +75,7 @@
     <div class="topbar">
       <a class="back" href="#" id="back">&larr; Menu</a>
       <span class="eyebrow" id="screen-label">Fight night &middot; 3 rounds</span>
+      <button type="button" class="sound-toggle" id="sound-toggle" aria-pressed="false">Sound on</button>
     </div>
     <section class="training" id="training-panel" hidden>
       <div class="drills" id="drills"></div>

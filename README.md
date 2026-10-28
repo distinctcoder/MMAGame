@@ -37,11 +37,22 @@ src/park/                the park hub: data.ts (gear, classes, the pickup ladder
                         cash, rep, XP and gear rules), world.ts (the street scene), walk.ts (walk cycle), controller.ts (the screen)
 src/story/               story mode: data.ts (chapters, bouts, opponents, dialogue), progress.ts (pure career and camp
                         rules), controller.ts (the story screen and bout flow)
+src/audio/               sound: synth.ts (every effect synthesized with Web Audio, no sample files), sound.ts (volume,
+                        mute, crowd and street ambience)
 src/profile/profile.ts  your fighter (name, styles, record, best drill scores, park and story progress), saved in the browser
 tests/                  rules.test.ts (fight rules), data.test.ts (data integrity), training.test.ts (drill scoring and placement), park.test.ts and story.test.ts (progression)
 ```
 
 The fight logic never touches the DOM. It reports what happened through the `FightEvents` interface (pops, banners, log lines, rumble), which the HUD and input modules implement. That keeps the rules testable and lets new screens, such as training mode, drive the same fight.
+
+## Sound
+
+Every sound is synthesized in the browser with Web Audio, so there are no audio files to ship:
+- punches and kicks thump and slap by target and power; blocks thud, parries tick, checked kicks clack
+- swings whoosh, takedowns slam, the bell rings each round, and taps sound on a submission
+- the crowd roars on big moments, the gym is quieter, and the park has a street hum
+
+Set the volume or mute on the main menu, use the Sound button above the fight, or press M. Audio starts after your first click or key press, as browsers require. The fight logic only emits cues (`FightEvents.sfx`); `src/audio/synth.ts` is where to tune how they sound.
 
 ## The park
 

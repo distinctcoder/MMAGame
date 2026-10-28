@@ -227,6 +227,7 @@ export class Hud {
       ['Submission', L.submit], ['Stand up / get up', L.getup], ['Block on the ground', L.block]
     ];
     if (!kb) rows.push(['Restart', 'Options']);
+    if (kb) rows.push(['Mute sound', 'M']);
     $('controls').innerHTML = `<thead><tr><th>Move</th><th>${kb ? 'Keyboard' : 'PS5 controller'}</th></tr></thead><tbody>`
       + rows.map(r => `<tr><td>${r[0]}</td><td><kbd>${r[1]}</kbd></td></tr>`).join('') + '</tbody>';
   }
